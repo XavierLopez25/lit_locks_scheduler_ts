@@ -3,8 +3,19 @@
 #include <backends/imgui_impl_opengl3.h>
 #include <stdexcept>
 
-ImGuiLayer::ImGuiLayer(const char* title, int width, int height)
-    : windowTitle(title), winW(width), winH(height)
+ImGuiLayer::ImGuiLayer(
+    const char* title,
+    std::vector<Process>& processes,
+    std::vector<Resource>& resources,
+    std::vector<Action>& actions,
+    int width,
+    int height
+) : windowTitle(title)
+  , winW(width)
+  , winH(height)
+  , processes_(&processes)
+  , resources_(&resources)
+  , actions_(&actions)
 {
     init();
 }
@@ -51,11 +62,12 @@ void ImGuiLayer::renderLoop()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- Aquí dibujas tu UI ---
         ImGui::Begin("Simulador2025");
         ImGui::Text("¡Hola, Simulador está corriendo!");
         ImGui::End();
-        // ---------------------------
+
+        // panel para ver/lipiar datos
+        showDataPanel();
 
         // 3) Renderizar
         ImGui::Render();
@@ -66,6 +78,52 @@ void ImGuiLayer::renderLoop()
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
+}
+
+void ImGuiLayer::showDataPanel() {
+    ImGui::Begin("Data Viewer");
+
+    // Botón para limpiar todo
+    if (ImGui::Button("Clear All Data")) {
+        processes_->clear();
+        resources_->clear();
+        actions_->clear();
+    }
+
+    // Lista de procesos
+    if (ImGui::CollapsingHeader("Processes")) {
+        for (const auto& p : *processes_) {
+            ImGui::BulletText(
+              "%s: burst=%d, arrival=%d, priority=%d",
+              p.pid.c_str(), p.burst, p.arrival, p.priority
+            );
+        }
+    }
+
+    // Lista de recursos
+    if (ImGui::CollapsingHeader("Resources")) {
+        for (const auto& r : *resources_) {
+            ImGui::BulletText(
+              "%s: count=%d",
+              r.name.c_str(), r.count
+            );
+        }
+    }
+
+    // Lista de acciones
+    if (ImGui::CollapsingHeader("Actions")) {
+        for (const auto& a : *actions_) {
+            ImGui::BulletText(
+              "%s: %s %s @ cycle %d",
+              a.pid.c_str(),
+              a.type.c_str(),
+              a.res.c_str(),
+              a.cycle
+            );
+        }
+    }
+
+    ImGui::End();
 }
 
 void ImGuiLayer::run()

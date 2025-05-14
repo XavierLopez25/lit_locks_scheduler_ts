@@ -12,15 +12,22 @@
 
 int main(int argc, char** argv) {
     try {
-    
-    std::string data_dir = DATA_DIR;
+        
+        std::string data_dir = DATA_DIR;
 
-    auto processes = loadProcesses(data_dir + "/processes.txt");
-    auto resources = loadResources(data_dir + "/resources.txt");
-    auto actions   = loadActions(data_dir + "/actions.txt");
+        auto processes = loadProcesses(data_dir + "/processes.txt");
+        auto resources = loadResources(data_dir + "/resources.txt");
+        auto actions   = loadActions(data_dir + "/actions.txt");
 
-        // Inicializar UI (Dear ImGui)
-        ImGuiLayer app("Simulador2025");
+        ImGuiLayer app (
+
+            "Simulador 2025",
+            processes,
+            resources,
+            actions
+
+        );
+
         app.run();
 
     } catch (const std::exception& e) {
