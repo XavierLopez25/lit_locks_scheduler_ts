@@ -2,6 +2,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <stdexcept>
+#include <unordered_map>
+#include <random>
 
 ImGuiLayer::ImGuiLayer(
     const char* title,
@@ -26,6 +28,7 @@ ImGuiLayer::ImGuiLayer(
     )
 {
     init();
+    assignPidColors();
 }
 
 ImGuiLayer::~ImGuiLayer()
@@ -57,6 +60,21 @@ void ImGuiLayer::init()
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
+void ImGuiLayer::assignPidColors() {
+    // Motor RNG con semilla fija para reproducibilidad
+    static std::mt19937_64 rng{12345};
+    std::uniform_int_distribution<int> dist(50, 230);
+
+    pidColors_.clear();
+    for (auto& p : *processes_) {
+        const auto& id = p.pid;
+        if (pidColors_.count(id) == 0) {
+            int r = dist(rng), g = dist(rng), b = dist(rng);
+            pidColors_[id] = IM_COL32(r, g, b, 255);
+        }
+    }
+}
+
 void ImGuiLayer::renderLoop()
 {
     while (!glfwWindowShouldClose(window))
@@ -70,6 +88,22 @@ void ImGuiLayer::renderLoop()
         showDataPanel();
 
         if (ImGui::CollapsingHeader("Simulación")) {
+
+            // RadioButtons para elegir algoritmo 
+            static int algoIdx = 0;
+            ImGui::Text("Algoritmo:");
+            ImGui::SameLine(); ImGui::RadioButton("FIFO",     &algoIdx, 0);
+            ImGui::SameLine(); ImGui::RadioButton("SJF",      &algoIdx, 1);
+            ImGui::SameLine(); ImGui::RadioButton("SRT",      &algoIdx, 2);
+            ImGui::SameLine(); ImGui::RadioButton("RR",       &algoIdx, 3);
+            ImGui::SameLine(); ImGui::RadioButton("Priority", &algoIdx, 4);
+
+            if (engine_.getAlgorithm() != static_cast<SchedulingAlgo>(algoIdx)) {
+                engine_.setAlgorithm(static_cast<SchedulingAlgo>(algoIdx));
+                engine_.reset();
+                running_ = false;
+            }
+
             ImGui::Text("Ciclo: %d", engine_.currentCycle());
 
             static double last = glfwGetTime();
@@ -155,12 +189,10 @@ void ImGuiLayer::renderLoop()
             int segmentStart = 0;
             for (int i = 0; i < (int)history.size(); ++i) {
                 const auto& pid = history[i];
-                ImU32 color =
-                    pid == "P1" ? IM_COL32(200,50,50,255) :
-                    pid == "P2" ? IM_COL32(50,200,50,255) :
-                    pid == "P3" ? IM_COL32(50,50,200,255) :
-                    pid == "P4" ? IM_COL32(200,200,50,255) :
-                                colorIdle;
+                ImU32 color = colorIdle;
+                if (pidColors_.count(pid)) {
+                    color = pidColors_[pid];
+                }
 
                 // barra
                 drawList->AddRectFilled({x, y}, {x+boxW, y+boxH}, color);

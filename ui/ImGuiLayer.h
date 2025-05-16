@@ -2,6 +2,8 @@
 #include <imgui.h>
 #include <GLFW/glfw3.h>
 #include <vector>
+#include <unordered_map>
+#include <random>
 #include "Process.h"
 #include "Resource.h"
 #include "Action.h"
@@ -26,11 +28,13 @@ private:
     void renderLoop();
     void showDataPanel();      
     void cleanup();
+    void assignPidColors();
 
     // Punteros a los datos que se quiere mostrar o limpiar
     std::vector<Process>*  processes_;
     std::vector<Resource>* resources_;
     std::vector<Action>*   actions_;
+    std::unordered_map<std::string, ImU32> pidColors_;
 
     GLFWwindow* window = nullptr;
     const char* windowTitle;

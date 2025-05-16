@@ -18,14 +18,21 @@ SimulationEngine::SimulationEngine(
 }
 
 void SimulationEngine::reset() {
-    cycle_      = -1;
-    rrCounter_  = 0;
-    runningIdx_ = -1;
-    procs_      = origProcs_;
-    res_        = origRes_;
-    acts_       = origActs_;
+    cycle_            = -1;
+    rrCounter_        = 0;
+    runningIdx_       = -1;
+    procs_            = origProcs_;
+    res_              = origRes_;
+    acts_             = origActs_;
     readyQueue_.clear();
     executionHistory_.clear();
+
+    if (algo_ == SchedulingAlgo::SJF) {
+        // Carga todos los procesos en la cola de listos de golpe
+        for (int i = 0; i < (int)procs_.size(); ++i) {
+            readyQueue_.push_back(i);
+        }
+    }
 }
 
 bool SimulationEngine::isFinished() const {
@@ -41,10 +48,22 @@ const std::deque<int>&       SimulationEngine::readyQueue() const { return ready
 
 void SimulationEngine::tick() {
     cycle_++;
-    handleArrivals();
-    scheduleNext();
+
+    // Sólo para los algoritmos basados en arrival:
+    if (algo_ != SchedulingAlgo::SJF) {
+        handleArrivals();
+    }
+
+    // scheduling según tipo
+    bool preemptivo = (algo_==SchedulingAlgo::SRT ||
+                       algo_==SchedulingAlgo::RR ||
+                       algo_==SchedulingAlgo::PRIORITY);
+    if (preemptivo || runningIdx_ < 0) {
+        scheduleNext();
+    }
+
     executionHistory_.push_back(
-        runningIdx_ >= 0 ? procs_[runningIdx_].pid : "idle"
+        runningIdx_>=0 ? procs_[runningIdx_].pid : "idle"
     );
     executeRunning();
 }
@@ -58,10 +77,31 @@ void SimulationEngine::handleArrivals() {
 }
 
 void SimulationEngine::scheduleNext() {
-    // FIFO
-    if (runningIdx_ < 0 && !readyQueue_.empty()) {
-        runningIdx_ = readyQueue_.front();
-        readyQueue_.pop_front();
+    switch(algo_) {
+
+        // Algoritmo FIFO
+        case SchedulingAlgo::FIFO:
+        if (runningIdx_<0 && !readyQueue_.empty()) {
+            runningIdx_ = readyQueue_.front();
+            readyQueue_.pop_front();
+        }
+        break;
+
+        // Algoritmo Shortest Job Fist
+        case SchedulingAlgo::SJF:
+        if (runningIdx_<0 && !readyQueue_.empty()) {
+            // busca el índice en readyQueue_ con menor burst
+            auto it = std::min_element(
+                readyQueue_.begin(), readyQueue_.end(),
+                [&](int a, int b){
+                    return procs_[a].burst < procs_[b].burst;
+                }
+            );
+            runningIdx_ = *it;
+            readyQueue_.erase(it);
+        }
+        break;
+
     }
 }
 

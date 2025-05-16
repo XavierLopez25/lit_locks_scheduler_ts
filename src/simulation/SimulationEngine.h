@@ -27,6 +27,12 @@ public:
     const std::vector<std::string>& getExecutionHistory() const {
         return executionHistory_;
     }
+    void setAlgorithm(SchedulingAlgo algo) {
+        algo_ = algo;
+    }
+    SchedulingAlgo getAlgorithm() const {
+        return algo_;
+    }
 
 private:
     // datos originales (para reset)
