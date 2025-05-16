@@ -5,6 +5,7 @@
 #include "Process.h"
 #include "Resource.h"
 #include "Action.h"
+#include "simulation/SimulationEngine.h" 
 
 class ImGuiLayer {
 public:
@@ -26,12 +27,17 @@ private:
     void showDataPanel();      
     void cleanup();
 
-    GLFWwindow* window = nullptr;
-    const char* windowTitle;
-    int winW, winH;
-
     // Punteros a los datos que se quiere mostrar o limpiar
     std::vector<Process>*  processes_;
     std::vector<Resource>* resources_;
     std::vector<Action>*   actions_;
+
+    GLFWwindow* window = nullptr;
+    const char* windowTitle;
+    int winW, winH;
+
+    // motor de simulación y control
+    SimulationEngine engine_;   
+    bool            running_ = false;
+    float           speed_   = 1.0f;
 };

@@ -36,6 +36,8 @@ pkg_search_module(GLFW REQUIRED glfw3)
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/ui
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/simulation
     ${GLFW_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/external/imgui
     ${CMAKE_SOURCE_DIR}/external/imgui/backends
@@ -48,6 +50,7 @@ set(APP_SRC
   src/main.cpp
   src/Parser.cpp
   ui/ImGuiLayer.cpp
+  src/simulation/SimulationEngine.cpp  
 )
 
 # Fuentes de ImGui core
