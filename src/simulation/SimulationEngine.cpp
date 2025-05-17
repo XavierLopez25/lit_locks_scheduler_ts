@@ -50,9 +50,13 @@ void SimulationEngine::tick() {
     cycle_++;
 
     // Sólo para los algoritmos basados en arrival:
-    if (algo_ != SchedulingAlgo::SJF) {
+    if (algo_ == SchedulingAlgo::FIFO ||
+        algo_ == SchedulingAlgo::SRT ||
+        algo_ == SchedulingAlgo::RR ||
+        algo_ == SchedulingAlgo::PRIORITY) {
         handleArrivals();
     }
+
 
     // scheduling según tipo
     bool preemptivo = (algo_==SchedulingAlgo::SRT ||
@@ -123,6 +127,28 @@ void SimulationEngine::scheduleNext() {
 
         }
         break;
+
+        //Algoritmo Priority Scheduling
+        case SchedulingAlgo::PRIORITY:
+        {
+            if (runningIdx_ >= 0) {
+                readyQueue_.push_back(runningIdx_);
+                runningIdx_ = -1;
+            }
+
+            if (!readyQueue_.empty()) {
+                auto it = std::min_element(
+                    readyQueue_.begin(), readyQueue_.end(),
+                    [&](int a, int b){
+                        return procs_[a].priority < procs_[b].priority;
+                    }
+                );
+                runningIdx_ = *it;
+                readyQueue_.erase(it);
+            }
+        }
+        break;
+
 
     }
 }
