@@ -102,6 +102,28 @@ void SimulationEngine::scheduleNext() {
         }
         break;
 
+        // Algoritmo Shortest Remaining Time (SRT)
+        case SchedulingAlgo::SRT:
+        {
+            if (runningIdx_ >= 0){
+                readyQueue_.push_back(runningIdx_);
+                runningIdx_ = -1;
+            }
+
+            if(!readyQueue_.empty()){
+                auto it = std::min_element(
+                    readyQueue_.begin(), readyQueue_.end(),
+                    [&](int a, int b){
+                        return procs_[a].burst < procs_[b].burst;
+                    }
+                );
+                runningIdx_ = *it;
+                readyQueue_.erase(it);
+            }
+
+        }
+        break;
+
     }
 }
 
