@@ -27,8 +27,8 @@ void SimulationEngine::reset() {
     readyQueue_.clear();
     executionHistory_.clear();
 
-    if (algo_ == SchedulingAlgo::SJF) {
-        // Carga todos los procesos en la cola de listos de golpe
+    if (algo_ == SchedulingAlgo::SJF ||
+        algo_ == SchedulingAlgo::PRIORITY) {
         for (int i = 0; i < (int)procs_.size(); ++i) {
             readyQueue_.push_back(i);
         }
@@ -49,19 +49,15 @@ const std::deque<int>&       SimulationEngine::readyQueue() const { return ready
 void SimulationEngine::tick() {
     cycle_++;
 
-    // Sólo para los algoritmos basados en arrival:
     if (algo_ == SchedulingAlgo::FIFO ||
-        algo_ == SchedulingAlgo::SRT ||
-        algo_ == SchedulingAlgo::RR ||
-        algo_ == SchedulingAlgo::PRIORITY) {
+        algo_ == SchedulingAlgo::SRT  ||
+        algo_ == SchedulingAlgo::RR) {
         handleArrivals();
     }
 
+    bool preemptivo = (algo_ == SchedulingAlgo::SRT ||
+                       algo_ == SchedulingAlgo::RR);
 
-    // scheduling según tipo
-    bool preemptivo = (algo_==SchedulingAlgo::SRT ||
-                       algo_==SchedulingAlgo::RR ||
-                       algo_==SchedulingAlgo::PRIORITY);
     if (preemptivo || runningIdx_ < 0) {
         scheduleNext();
     }
