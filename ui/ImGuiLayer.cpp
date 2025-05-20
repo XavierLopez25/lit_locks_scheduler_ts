@@ -150,6 +150,13 @@ void ImGuiLayer::renderLoop()
                     : engine_.procs()[engine_.runningIndex()].pid.c_str()
             );
 
+            if (engine_.isFinished()) {
+                float avgWait = engine_.getAverageWaitingTime();
+                ImGui::Separator();
+                ImGui::Text("Resumen de eficiencia:");
+                ImGui::Text("Tiempo promedio de espera: %.2f ciclos", avgWait);
+            }
+
             ImGui::Text("Ready queue:");
             for (auto idx : engine_.readyQueue()) {
                 ImGui::SameLine();

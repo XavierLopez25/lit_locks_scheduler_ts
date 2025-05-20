@@ -34,6 +34,8 @@ public:
         return algo_;
     }
 
+    float getAverageWaitingTime() const;
+
     int rrQuantum_   = 1;
 
 

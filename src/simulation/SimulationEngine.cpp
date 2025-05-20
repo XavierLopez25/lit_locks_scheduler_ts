@@ -1,6 +1,7 @@
 #include "SimulationEngine.h"
 #include <algorithm>
 #include <stdexcept>
+#include <unordered_map>
 
 SimulationEngine::SimulationEngine(
     const std::vector<Process>& procs,
@@ -172,4 +173,28 @@ void SimulationEngine::executeRunning() {
         runningIdx_ = -1;
         rrCounter_ = 0;
     }
+}
+
+float SimulationEngine::getAverageWaitingTime() const {
+    float total = 0.0f;
+    int count = 0;
+    std::unordered_map<std::string, int> firstAppearance;
+
+    for (int i = 0; i < (int)executionHistory_.size(); ++i) {
+        const std::string& pid = executionHistory_[i];
+        if (pid == "idle") continue;
+        if (!firstAppearance.count(pid)) {
+            firstAppearance[pid] = i;
+        }
+    }
+
+    for (const auto& proc : procs_) {
+        if (firstAppearance.count(proc.pid)) {
+            int wait = firstAppearance[proc.pid] - proc.arrival;
+            total += wait;
+            count++;
+        }
+    }
+
+    return count == 0 ? 0.0f : total / count;
 }
