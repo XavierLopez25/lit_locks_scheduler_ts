@@ -104,6 +104,10 @@ void ImGuiLayer::renderLoop()
                 running_ = false;
             }
 
+            if(algoIdx == static_cast<int>(SchedulingAlgo::RR)) {
+                ImGui::SliderInt("Quantum", &engine_.rrQuantum_, 1, 10);
+            }
+
             ImGui::Text("Ciclo: %d", engine_.currentCycle());
 
             static double last = glfwGetTime();

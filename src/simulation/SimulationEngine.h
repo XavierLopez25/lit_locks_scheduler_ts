@@ -34,6 +34,9 @@ public:
         return algo_;
     }
 
+    int rrQuantum_   = 1;
+
+
 private:
     // datos originales (para reset)
     std::vector<Process>  origProcs_;
@@ -49,7 +52,6 @@ private:
 
     int cycle_       = 0;
     SchedulingAlgo algo_;
-    int rrQuantum_   = 1;
     int rrCounter_   = 0;
 
     std::deque<int> readyQueue_;

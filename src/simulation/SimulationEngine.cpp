@@ -145,6 +145,21 @@ void SimulationEngine::scheduleNext() {
         }
         break;
 
+        case SchedulingAlgo::RR:
+        {
+            if (runningIdx_ >= 0 && rrCounter_ >= rrQuantum_) {
+                readyQueue_.push_back(runningIdx_);
+                runningIdx_ = -1;
+                rrCounter_ = 0;
+            }
+
+            if (runningIdx_ < 0 && !readyQueue_.empty()){
+                runningIdx_ = readyQueue_.front();
+                readyQueue_.pop_front();
+                rrCounter_ = 0;
+            }
+        }
+        break;
 
     }
 }
@@ -155,5 +170,6 @@ void SimulationEngine::executeRunning() {
     rrCounter_++;
     if (procs_[runningIdx_].burst <= 0) {
         runningIdx_ = -1;
+        rrCounter_ = 0;
     }
 }
