@@ -1,9 +1,26 @@
 #pragma once
 #include <string>
+#include <deque>
+
+enum class SchedulingAlgo { FIFO, SJF, SRT, RR, PRIORITY };
+enum class ProcState { READY, RUNNING, BLOCKED };
 
 struct Process {
     std::string pid;
     int burst;
     int arrival;
     int priority;
+    ProcState state = ProcState::READY; 
+};
+
+struct Mutex {
+    bool locked = false;
+    int ownerIdx = -1;              // índice en el vector de procesos
+    std::deque<int> waitQueue;      // índices de procesos bloqueados
+};
+
+struct Semaphore {
+    int count;
+    std::deque<int> waitQueue;
+    Semaphore(int c = 0): count(c) {}
 };
