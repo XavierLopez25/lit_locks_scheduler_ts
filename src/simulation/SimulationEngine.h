@@ -1,12 +1,13 @@
 #pragma once
 
-#include <vector>
-#include <deque>
 #include "Process.h"
 #include "Resource.h"
 #include "Action.h"
-
-enum class SchedulingAlgo { FIFO, SJF, SRT, RR, PRIORITY };
+#include "SyncPrimitives/SyncPrimitives.h"
+#include "common/SimMode.h"
+#include <unordered_map>
+#include <vector>
+#include <deque>
 
 class SimulationEngine {
 public:
@@ -38,12 +39,26 @@ public:
 
     int rrQuantum_   = 1;
 
+    const std::vector<SyncEvent>& getSyncLog() const { return syncLog_; }
+
+    void setMode(SimMode m) { mode_ = m; }
+    SimMode getMode() const   { return mode_; }
+
+    bool isMutex(const std::string& name) const;
 
 private:
+
+    SimMode mode_ = SimMode::SCHEDULING;
+
     // datos originales (para reset)
     std::vector<Process>  origProcs_;
     std::vector<Resource> origRes_;
     std::vector<Action>   origActs_;
+
+    SyncPrimitives sync_;
+    std::vector<SyncEvent> syncLog_; 
+    std::unordered_map<std::string, Mutex>    mutexes_;
+    std::unordered_map<std::string, Semaphore> semaphores_;
 
     // estado mutable
     std::vector<Process>  procs_;
@@ -59,8 +74,10 @@ private:
     std::deque<int> readyQueue_;
     int runningIdx_  = -1;
 
+    int findProcessIndex(const std::string& pid) const;
+
     void handleArrivals();
     void scheduleNext();
     void executeRunning();
-   
+    void handleSyncActions();
 };
