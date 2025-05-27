@@ -1,4 +1,9 @@
 #include "SimulationEngine.h"
+#include "SyncPrimitives/SyncPrimitives.h"
+#include "Process.h"      
+#include "Resource.h"
+#include "common/SimMode.h"
+#include "Action.h"
 #include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
@@ -30,10 +35,27 @@ void SimulationEngine::reset() {
 
     if (algo_ == SchedulingAlgo::SJF ||
         algo_ == SchedulingAlgo::PRIORITY) {
+        // Carga todos los procesos en la cola de listos de golpe
         for (int i = 0; i < (int)procs_.size(); ++i) {
             readyQueue_.push_back(i);
         }
     }
+
+    syncLog_.clear();
+
+    sync_.mutexes.clear();
+    sync_.semaphores.clear();
+
+    for (auto &r : origRes_) {
+        if (r.count == 1)
+            sync_.mutexes[r.name] = Mutex{};
+        else
+            sync_.semaphores[r.name] = Semaphore(r.count);
+    }
+}
+
+bool SimulationEngine::isMutex(const std::string& name) const {
+    return sync_.mutexes.count(name) > 0;
 }
 
 bool SimulationEngine::isFinished() const {
@@ -50,29 +72,126 @@ const std::deque<int>&       SimulationEngine::readyQueue() const { return ready
 void SimulationEngine::tick() {
     cycle_++;
 
-    if (algo_ == SchedulingAlgo::FIFO ||
-        algo_ == SchedulingAlgo::SRT  ||
-        algo_ == SchedulingAlgo::RR) {
-        handleArrivals();
+    if (mode_ == SimMode::SCHEDULING) {
+        // 1) arrivals
+        if (algo_ == SchedulingAlgo::FIFO || 
+            algo_ == SchedulingAlgo::SRT  ||
+            algo_ == SchedulingAlgo::RR) {
+            handleArrivals();
+        }
+
+        // 2) scheduling
+        bool preemptivo = (algo_==SchedulingAlgo::SRT ||
+                           algo_==SchedulingAlgo::RR ||
+                           algo_==SchedulingAlgo::PRIORITY);
+        if (preemptivo || runningIdx_ < 0) {
+            scheduleNext();
+        }
+
+        // 3) record & execute
+        executionHistory_.push_back(
+            runningIdx_>=0 ? procs_[runningIdx_].pid : "idle"
+        );
+        executeRunning();
+
+    } else {
+        // —————— MODO SYNCHRONIZATION ——————
+        // sólo procesar acciones de sincronización
+        handleSyncActions();
     }
-
-    bool preemptivo = (algo_ == SchedulingAlgo::SRT ||
-                       algo_ == SchedulingAlgo::RR);
-
-    if (preemptivo || runningIdx_ < 0) {
-        scheduleNext();
-    }
-
-    executionHistory_.push_back(
-        runningIdx_>=0 ? procs_[runningIdx_].pid : "idle"
-    );
-    executeRunning();
 }
 
 void SimulationEngine::handleArrivals() {
     for (int i = 0; i < (int)procs_.size(); ++i) {
         if (procs_[i].arrival == cycle_) {
             readyQueue_.push_back(i);
+        }
+    }
+}
+
+int SimulationEngine::findProcessIndex(const std::string& pid) const {
+    for (int i = 0; i < (int)procs_.size(); ++i) {
+        if (procs_[i].pid == pid)
+            return i;
+    }
+    return -1; // No encontrado
+}
+
+void SimulationEngine::handleSyncActions() {
+    for (auto &act : acts_) {
+        if (act.cycle != cycle_) continue;
+
+        int idx = findProcessIndex(act.pid);
+        if (idx < 0) continue;
+
+        Process& p = procs_[idx];
+
+        // Helper para registrar evento
+        auto logEvent = [&](SyncResult r){
+            syncLog_.push_back({ cycle_, idx, act.res, r });
+        };
+
+        if (act.type == "READ" || act.type == "WRITE") {
+            auto& s = sync_.semaphores[act.res];  
+
+            if (s.count > 0) {
+                s.count--;
+                logEvent(SyncResult::ACCESSED);
+            } else {
+                p.state = ProcState::BLOCKED;
+                s.waitQueue.push_back(idx);
+                logEvent(SyncResult::WAITING);
+            }
+        }
+
+        if (act.type == "LOCK") {
+            auto &m = sync_.mutexes[act.res];
+            if (!m.locked) {
+                m.locked = true;
+                m.ownerIdx = idx;
+                logEvent(SyncResult::ACCESSED);
+            } else {
+                p.state = ProcState::BLOCKED;
+                m.waitQueue.push_back(idx);
+                logEvent(SyncResult::WAITING);
+            }
+
+        } else if (act.type == "UNLOCK") {
+            auto &m = sync_.mutexes[act.res];
+            if (m.ownerIdx == idx) {
+                if (m.waitQueue.empty()) {
+                    m.locked = false;
+                    m.ownerIdx = -1;
+                } else {
+                    int next = m.waitQueue.front();
+                    m.waitQueue.pop_front();
+                    m.ownerIdx = next;
+                    procs_[next].state = ProcState::READY;
+                    readyQueue_.push_back(next);
+                }
+            }
+
+        } else if (act.type == "WAIT") {
+            auto &s = sync_.semaphores[act.res];
+            if (s.count > 0) {
+                s.count--;
+                logEvent(SyncResult::ACCESSED);
+            } else {
+                p.state = ProcState::BLOCKED;
+                s.waitQueue.push_back(idx);
+                logEvent(SyncResult::WAITING);
+            }
+
+        } else if (act.type == "SIGNAL") {
+            auto &s = sync_.semaphores[act.res];
+            if (s.waitQueue.empty()) {
+                s.count++;
+            } else {
+                int next = s.waitQueue.front();
+                s.waitQueue.pop_front();
+                procs_[next].state = ProcState::READY;
+                readyQueue_.push_back(next);
+            }
         }
     }
 }
@@ -146,6 +265,7 @@ void SimulationEngine::scheduleNext() {
         }
         break;
 
+        // Algoritmo Round Robin
         case SchedulingAlgo::RR:
         {
             if (runningIdx_ >= 0 && rrCounter_ >= rrQuantum_) {
@@ -161,17 +281,6 @@ void SimulationEngine::scheduleNext() {
             }
         }
         break;
-
-    }
-}
-
-void SimulationEngine::executeRunning() {
-    if (runningIdx_ < 0) return;
-    procs_[runningIdx_].burst--;
-    rrCounter_++;
-    if (procs_[runningIdx_].burst <= 0) {
-        runningIdx_ = -1;
-        rrCounter_ = 0;
     }
 }
 
@@ -197,4 +306,14 @@ float SimulationEngine::getAverageWaitingTime() const {
     }
 
     return count == 0 ? 0.0f : total / count;
+}
+
+void SimulationEngine::executeRunning() {
+    if (runningIdx_ < 0) return;
+    procs_[runningIdx_].burst--;
+    rrCounter_++;
+    if (procs_[runningIdx_].burst <= 0) {
+        runningIdx_ = -1;
+        rrCounter_ = 0;
+    }
 }
