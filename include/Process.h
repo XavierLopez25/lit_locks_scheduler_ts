@@ -10,6 +10,7 @@ struct Process {
     int burst;
     int arrival;
     int priority;
+    bool justGrantedMutex = false;
     ProcState state = ProcState::READY; 
 };
 
