@@ -46,6 +46,13 @@ public:
 
     bool isMutex(const std::string& name) const;
 
+    const std::unordered_map<std::string, Mutex>& getMutexes() const {
+        return sync_.mutexes;
+    }
+    const std::unordered_map<std::string, Semaphore>& getSemaphores() const {
+        return sync_.semaphores;
+    }
+
 private:
 
     SimMode mode_ = SimMode::SCHEDULING;
@@ -71,6 +78,8 @@ private:
     SchedulingAlgo algo_;
     int rrCounter_   = 0;
 
+    int maxSyncCycle_; 
+    
     std::deque<int> readyQueue_;
     int runningIdx_  = -1;
 

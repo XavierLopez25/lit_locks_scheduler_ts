@@ -6,6 +6,7 @@
 #include "Action.h"
 #include <algorithm>
 #include <stdexcept>
+#include <iostream>
 #include <unordered_map>
 
 SimulationEngine::SimulationEngine(
@@ -46,6 +47,12 @@ void SimulationEngine::reset() {
     sync_.mutexes.clear();
     sync_.semaphores.clear();
 
+    maxSyncCycle_ = 0;
+    for (auto &a : origActs_) {
+        if (a.cycle > maxSyncCycle_)
+            maxSyncCycle_ = a.cycle;
+    }
+
     for (auto &r : origRes_) {
         if (r.count == 1)
             sync_.mutexes[r.name] = Mutex{};
@@ -70,6 +77,11 @@ const std::vector<Process>& SimulationEngine::procs() const { return procs_; }
 const std::deque<int>&       SimulationEngine::readyQueue() const { return readyQueue_; }
 
 void SimulationEngine::tick() {
+
+    if (mode_ == SimMode::SYNCHRONIZATION && cycle_ >= maxSyncCycle_) {
+        return;
+    }
+    
     cycle_++;
 
     if (mode_ == SimMode::SCHEDULING) {
@@ -119,81 +131,161 @@ int SimulationEngine::findProcessIndex(const std::string& pid) const {
 
 void SimulationEngine::handleSyncActions() {
     for (auto &act : acts_) {
-        if (act.cycle != cycle_) continue;
+        if (act.cycle != cycle_) 
+            continue;
 
         int idx = findProcessIndex(act.pid);
-        if (idx < 0) continue;
+        if (idx < 0) 
+            continue;
 
         Process& p = procs_[idx];
 
+        if (act.type == "SIGNAL" && p.state == ProcState::BLOCKED) {
+            // si sigue bloqueado, no puede ejecutar SIGNAL
+            continue;
+        }
+
         // Helper para registrar evento
-        auto logEvent = [&](SyncResult r){
-            syncLog_.push_back({ cycle_, idx, act.res, r });
+        auto logEvent = [&](SyncResult r, SyncAction a){
+            syncLog_.push_back({ cycle_, idx, act.res, r, a });
         };
 
+        auto logEventAt = [&](int evCycle, SyncResult r, SyncAction a){
+            syncLog_.push_back({ evCycle,    
+                                    idx,
+                                    act.res,
+                                    r,
+                                    a 
+                                });
+        };
+        // —— SEMÁFORO: READ / WRITE ——
         if (act.type == "READ" || act.type == "WRITE") {
-            auto& s = sync_.semaphores[act.res];  
-
+            auto& s = sync_.semaphores[act.res];
             if (s.count > 0) {
                 s.count--;
-                logEvent(SyncResult::ACCESSED);
+                logEvent(SyncResult::ACCESSED, SyncAction::READ);
             } else {
                 p.state = ProcState::BLOCKED;
                 s.waitQueue.push_back(idx);
-                logEvent(SyncResult::WAITING);
+                logEvent(SyncResult::WAITING, SyncAction::READ);
             }
-        }
 
-        if (act.type == "LOCK") {
+        } else if (act.type == "LOCK") {
+
             auto &m = sync_.mutexes[act.res];
+
+            // Ya es el dueño → error
+            if (m.ownerIdx == idx) {
+                std::cerr << "[Error] Proceso " << idx << " ya es dueño del mutex " << act.res
+                        << " y volvió a hacer LOCK." << std::endl;
+                continue;
+            }
+
+            // Acaba de recibir el mutex por UNLOCK → no debe volver a hacer LOCK
+            if (procs_[idx].justGrantedMutex) {
+                std::cerr << "[Error] Proceso " << idx << " ya recibió el mutex automáticamente en "
+                        << "el ciclo anterior, no debe volver a pedir LOCK." << std::endl;
+                continue;
+            }
+
+            // intento atómico de adquirir
             if (!m.locked) {
-                m.locked = true;
+                // si estaba libre, me lo quedo
+                m.locked   = true;
                 m.ownerIdx = idx;
-                logEvent(SyncResult::ACCESSED);
+                logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::LOCK);
             } else {
+                // si estaba ocupado, me bloqueo hasta un unlock futuro
                 p.state = ProcState::BLOCKED;
                 m.waitQueue.push_back(idx);
-                logEvent(SyncResult::WAITING);
+                logEventAt(cycle_, SyncResult::WAITING, SyncAction::LOCK);
             }
 
         } else if (act.type == "UNLOCK") {
             auto &m = sync_.mutexes[act.res];
-            if (m.ownerIdx == idx) {
-                if (m.waitQueue.empty()) {
-                    m.locked = false;
-                    m.ownerIdx = -1;
-                } else {
-                    int next = m.waitQueue.front();
-                    m.waitQueue.pop_front();
-                    m.ownerIdx = next;
-                    procs_[next].state = ProcState::READY;
-                    readyQueue_.push_back(next);
-                }
-            }
+            // sólo el dueño puede hacer unlock
+            if (m.ownerIdx != idx) 
+                continue;
 
+            // 1) dibujo el UNLOCK del dueño actual
+            logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::UNLOCK);
+
+            // 2) si hay alguien en la cola, cédelo inmediatamente
+            if (!m.waitQueue.empty()) {
+                int next = m.waitQueue.front();
+                m.waitQueue.pop_front();
+
+                // reasignar dueño sin liberar el mutex
+                m.ownerIdx = next;
+                // (m.locked ya está true)
+                procs_[next].justGrantedMutex = true;
+
+                // despierta a next
+                procs_[next].state = ProcState::READY;
+                readyQueue_.push_back(next);
+
+                // 3) dibujo el LOCK automático para el despertado
+                syncLog_.push_back({
+                    cycle_,            // mismo ciclo
+                    next,              // nuevo dueño
+                    act.res,
+                    SyncResult::ACCESSED,
+                    SyncAction::LOCK
+                });
+                procs_[next].justGrantedMutex = false;
+            } else {
+                // 4) si no hay nadie esperando, libero completamente
+                m.locked   = false;
+                m.ownerIdx = -1;
+            }
         } else if (act.type == "WAIT") {
             auto &s = sync_.semaphores[act.res];
             if (s.count > 0) {
+                // adquisición atómica
                 s.count--;
-                logEvent(SyncResult::ACCESSED);
+                logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::WAIT);
             } else {
+                // bloqueo
                 p.state = ProcState::BLOCKED;
                 s.waitQueue.push_back(idx);
-                logEvent(SyncResult::WAITING);
+                logEventAt(cycle_, SyncResult::WAITING, SyncAction::WAIT);
             }
 
         } else if (act.type == "SIGNAL") {
             auto &s = sync_.semaphores[act.res];
-            if (s.waitQueue.empty()) {
-                s.count++;
-            } else {
+            // 1) dibujo la señalización del que libera
+            logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::SIGNAL);
+
+            if (!s.waitQueue.empty()) {
+                // 2) despierto exactamente a uno y le concedo el recurso
                 int next = s.waitQueue.front();
                 s.waitQueue.pop_front();
+
                 procs_[next].state = ProcState::READY;
                 readyQueue_.push_back(next);
+
+                // el wake incluye el acceso para next:
+                syncLog_.push_back({
+                    cycle_,
+                    next,
+                    act.res,
+                    SyncResult::ACCESSED,
+                    SyncAction::WAKE
+                });
+            } else {
+                // 3) si nadie esperaba, incremento el contador
+                s.count++;
             }
         }
     }
+
+    // —— Finalmente, ordenar para el rendering —— 
+    std::sort(syncLog_.begin(), syncLog_.end(),
+        [](auto const &a, auto const &b){
+            if (a.cycle != b.cycle) return a.cycle < b.cycle;
+            return a.pidIdx < b.pidIdx;
+        }
+    );
 }
 
 void SimulationEngine::scheduleNext() {
