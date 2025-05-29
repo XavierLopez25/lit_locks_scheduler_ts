@@ -3,19 +3,44 @@
 #include <string>
 #include <deque>
 #include <unordered_map>
-#include "Process.h"   
+#include "Process.h"
 
-enum class SyncResult { ACCESSED, WAITING };
+// Resultado de un intento de sincronización
+enum class SyncResult
+{
+    ACCESSED, // obtuvo el lock/semaforo
+    WAITING   // quedó bloqueado
+};
 
-// Todas las primitivas de sincronización que guarda el sistema
-struct SyncPrimitives {
-    std::unordered_map<std::string, Mutex>    mutexes;
+// Tipo de operación de sincronización
+enum class SyncAction
+{
+    READ,
+    WRITE,
+    LOCK,
+    UNLOCK,
+    WAIT,
+    SIGNAL,
+    WAKE
+};
+
+struct SyncPrimitives
+{
+    std::unordered_map<std::string, Mutex> mutexes;
     std::unordered_map<std::string, Semaphore> semaphores;
 };
 
-struct SyncEvent {
-    int cycle;           // ciclo en el que ocurre
-    int pidIdx;          // índice de proceso en procs_
-    std::string res;     // nombre del recurso
-    SyncResult result;   // ACCESSED si obtuvo el lock/semaforo, WAITING si quedó bloqueado
+struct SyncEvent
+{
+    int cycle;
+    int pidIdx;
+    std::string res;
+    SyncResult result;
+    SyncAction action;
+
+    SyncEvent(int c, int p, const std::string &r,
+              SyncResult rs, SyncAction a)
+        : cycle(c), pidIdx(p), res(r), result(rs), action(a)
+    {
+    }
 };
