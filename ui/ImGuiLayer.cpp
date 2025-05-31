@@ -7,18 +7,26 @@
 #include <random>
 
 ImGuiLayer::ImGuiLayer(
-    const char *title,
-    std::vector<Process> &processes,
-    std::vector<Resource> &resources,
-    std::vector<Action> &actions,
+    const char* title,
+    std::vector<Process>& processes,
+    std::vector<Resource>& resources,
+    std::vector<Action>& actions,
     int width,
-    int height)
-    : windowTitle(title), winW(width), winH(height), processes_(&processes), resources_(&resources), actions_(&actions), engine_(
-                                                                                                                             processes,            // origProcs
-                                                                                                                             resources,            // origRes
-                                                                                                                             actions,              // origActs
-                                                                                                                             SchedulingAlgo::FIFO, // algoritmo por defecto
-                                                                                                                             /*rrQuantum=*/1)
+    int height
+)
+  : windowTitle(title)
+  , winW(width)
+  , winH(height)
+  , processes_(&processes)
+  , resources_(&resources)
+  , actions_(&actions)
+  , engine_(
+      processes,      // origProcs
+      resources,      // origRes
+      actions,        // origActs
+      SchedulingAlgo::FIFO,  // algoritmo por defecto
+      /*rrQuantum=*/1
+    )
 {
     init();
     assignPidColors();
@@ -38,8 +46,7 @@ void ImGuiLayer::init()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
     window = glfwCreateWindow(winW, winH, windowTitle, nullptr, nullptr);
-    if (!window)
-    {
+    if (!window) {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window");
     }
@@ -54,18 +61,15 @@ void ImGuiLayer::init()
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void ImGuiLayer::assignPidColors()
-{
+void ImGuiLayer::assignPidColors() {
     // Motor RNG con semilla fija para reproducibilidad
     static std::mt19937_64 rng{12345};
     std::uniform_int_distribution<int> dist(50, 230);
 
     pidColors_.clear();
-    for (auto &p : *processes_)
-    {
-        const auto &id = p.pid;
-        if (pidColors_.count(id) == 0)
-        {
+    for (auto& p : *processes_) {
+        const auto& id = p.pid;
+        if (pidColors_.count(id) == 0) {
             int r = dist(rng), g = dist(rng), b = dist(rng);
             pidColors_[id] = IM_COL32(r, g, b, 255);
         }
@@ -89,25 +93,19 @@ void ImGuiLayer::renderLoop()
         // ── Selector de modo ─────────────────────────────────────────
         static int mode = 0;
         ImGui::Text("Modo:");
-        ImGui::SameLine();
-        ImGui::RadioButton("Calendarización", &mode, 0);
-        ImGui::SameLine();
-        ImGui::RadioButton("Sincronización", &mode, 1);
+        ImGui::SameLine(); ImGui::RadioButton("Calendarización", &mode, 0);
+        ImGui::SameLine(); ImGui::RadioButton("Sincronización",  &mode, 1);
         engine_.setMode(mode == 0 ? SimMode::SCHEDULING : SimMode::SYNCHRONIZATION);
 
         // ── Controles comunes ─────────────────────────────────────────
-        if (ImGui::Button(running_ ? "Pause" : "Start"))
-            running_ = !running_;
+        if (ImGui::Button(running_ ? "Pause" : "Start")) running_ = !running_;
         ImGui::SameLine();
-        if (ImGui::Button("Step"))
-        {
+        if (ImGui::Button("Step")) {
             engine_.tick();
-            if (engine_.isFinished())
-                running_ = false;
+            if (engine_.isFinished()) running_ = false;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Reset"))
-        {
+        if (ImGui::Button("Reset")) {
             engine_.reset();
             running_ = false;
         }
@@ -115,233 +113,211 @@ void ImGuiLayer::renderLoop()
         ImGui::SliderFloat("Speed", &speed_, 0.1f, 10.0f);
 
         // ── Auto-tick en cualquiera de los modos ──────────────────────
-        if (running_ && now - last >= 1.0 / speed_)
-        {
+        if (running_ && now - last >= 1.0 / speed_) {
             engine_.tick();
             last = now;
-            if (engine_.isFinished())
-                running_ = false;
+            if (engine_.isFinished()) running_ = false;
         }
 
-        if (mode == 0)
-        {
+        if (mode == 0) {
             // —————— PANEL DE CALENDARIZACIÓN ——————
-            if (ImGui::CollapsingHeader("Simulación (Calendarización)"))
-            {
+            if (ImGui::CollapsingHeader("Simulación (Calendarización)")) {
                 ImGui::Text("Algoritmo de calendarización:");
-                // RadioButtons para elegir algoritmo
+                // RadioButtons para elegir algoritmo 
                 static int algoIdx = 0;
-                ImGui::SameLine();
-                ImGui::RadioButton("FIFO", &algoIdx, 0);
-                ImGui::SameLine();
-                ImGui::RadioButton("SJF", &algoIdx, 1);
-                ImGui::SameLine();
-                ImGui::RadioButton("SRT", &algoIdx, 2);
-                ImGui::SameLine();
-                ImGui::RadioButton("RR", &algoIdx, 3);
-                ImGui::SameLine();
-                ImGui::RadioButton("Priority", &algoIdx, 4);
+                ImGui::SameLine(); ImGui::RadioButton("FIFO",     &algoIdx, 0);
+                ImGui::SameLine(); ImGui::RadioButton("SJF",      &algoIdx, 1);
+                ImGui::SameLine(); ImGui::RadioButton("SRT",      &algoIdx, 2);
+                ImGui::SameLine(); ImGui::RadioButton("RR",       &algoIdx, 3);
+                ImGui::SameLine(); ImGui::RadioButton("Priority", &algoIdx, 4);
 
-                if (engine_.getAlgorithm() != static_cast<SchedulingAlgo>(algoIdx))
-                {
+                if (engine_.getAlgorithm() != static_cast<SchedulingAlgo>(algoIdx)) {
                     engine_.setAlgorithm(static_cast<SchedulingAlgo>(algoIdx));
                     engine_.reset();
                     running_ = false;
                 }
 
-                if (algoIdx == static_cast<int>(SchedulingAlgo::RR))
-                {
+                if(algoIdx == static_cast<int>(SchedulingAlgo::RR)) {
                     ImGui::SliderInt("Quantum", &engine_.rrQuantum_, 1, 10);
                 }
 
                 ImGui::Text("Ciclo: %d", engine_.currentCycle());
 
                 ImGui::Text("Running PID: %s",
-                            engine_.runningIndex() < 0
-                                ? "idle"
-                                : engine_.procs()[engine_.runningIndex()].pid.c_str());
+                    engine_.runningIndex() < 0
+                        ? "idle"
+                        : engine_.procs()[engine_.runningIndex()].pid.c_str()
+                );
+
 
                 ImGui::Text("Ready queue:");
-                for (auto idx : engine_.readyQueue())
-                {
+                for (auto idx : engine_.readyQueue()) {
                     ImGui::SameLine();
                     ImGui::Text("%s", engine_.procs()[idx].pid.c_str());
                 }
 
-                if (engine_.isFinished())
-                {
+                if (engine_.isFinished()) {
                     float avgWait = engine_.getAverageWaitingTime();
                     ImGui::Separator();
                     ImGui::Text("Resumen de eficiencia:");
                     ImGui::Text("Tiempo promedio de espera: %.2f ciclos", avgWait);
                 }
             }
-            if (ImGui::CollapsingHeader("Diagrama de Gantt con ciclos y burst"))
-            {
-                auto &history = engine_.getExecutionHistory();
-                const float boxW = 30.0f;
-                const float boxH = 25.0f;
+            if (ImGui::CollapsingHeader("Diagrama de Gantt con ciclos y burst")) {
+                auto& history = engine_.getExecutionHistory();
+                const float boxW    = 30.0f;
+                const float boxH    = 25.0f;
                 const float spacing = 2.0f;
-                const ImU32 colorIdle = IM_COL32(120, 120, 120, 255);
+                const ImU32 colorIdle = IM_COL32(120,120,120,255);
 
-                const float topMargin = 30;
-                const float bottomMargin = 20;
-                const float totalHeight = (topMargin + boxH + bottomMargin);
+                const float topMargin    = 30;   
+                const float bottomMargin = 20;   
+                const float totalHeight  = (topMargin + boxH + bottomMargin);  
 
                 ImGui::BeginChild("GanttScroll",
-                                  ImGui::GetContentRegionAvail(),
-                                  true,
-                                  ImGuiWindowFlags_HorizontalScrollbar);
+                    ImGui::GetContentRegionAvail(),
+                    true,
+                    ImGuiWindowFlags_HorizontalScrollbar
+                );
 
                 ImVec2 startPos = ImGui::GetCursorScreenPos();
-                auto drawList = ImGui::GetWindowDrawList();
+                auto  drawList = ImGui::GetWindowDrawList();
 
-                // Dibuja TODOS los ciclos arriba
-                const float cycleOffsetY = startPos.y - 5;
-                for (int i = 0; i < (int)history.size(); ++i)
-                {
+                // Dibuja TODOS los ciclos arriba 
+                const float cycleOffsetY = startPos.y - 5;  
+                for (int i = 0; i < (int)history.size(); ++i) {
                     std::string num = std::to_string(i);
                     float textW = ImGui::CalcTextSize(num.c_str()).x;
-                    float x = startPos.x + i * (boxW + spacing) + (boxW - textW) / 2;
-                    drawList->AddText({x, cycleOffsetY}, IM_COL32(200, 200, 200, 255), num.c_str());
+                    float x = startPos.x + i*(boxW+spacing) + (boxW - textW)/2;
+                    drawList->AddText({x, cycleOffsetY}, IM_COL32(200,200,200,255), num.c_str());
                 }
 
-                //  Dibuja barras y burst acumulado
+                //  Dibuja barras y burst acumulado 
                 float x = startPos.x;
-                float y = startPos.y + 10;
+                float y = startPos.y + 10;     
                 int cumulative = 0;
                 int segmentStart = 0;
-                for (int i = 0; i < (int)history.size(); ++i)
-                {
-                    const auto &pid = history[i];
+                for (int i = 0; i < (int)history.size(); ++i) {
+                    const auto& pid = history[i];
                     ImU32 color = colorIdle;
-                    if (pidColors_.count(pid))
-                    {
+                    if (pidColors_.count(pid)) {
                         color = pidColors_[pid];
                     }
 
                     // barra
-                    drawList->AddRectFilled({x, y}, {x + boxW, y + boxH}, color);
-                    drawList->AddText({x + 5, y + 5}, IM_COL32(255, 255, 255, 255), pid.c_str());
+                    drawList->AddRectFilled({x, y}, {x+boxW, y+boxH}, color);
+                    drawList->AddText({x+5,y+5}, IM_COL32(255,255,255,255), pid.c_str());
 
-                    bool isEnd = (i + 1 == (int)history.size() || history[i + 1] != pid);
-                    if (pid != "idle" && isEnd)
-                    {
+                    bool isEnd = (i+1 == (int)history.size() || history[i+1] != pid);
+                    if (pid != "idle" && isEnd) {
                         int length = i - segmentStart + 1;
-                        cumulative += length;
+                        cumulative += length;      
                         auto txt = std::to_string(cumulative);
                         float tw = ImGui::CalcTextSize(txt.c_str()).x;
-                        float tx = x + (boxW - tw) / 2;
-                        float ty = y + boxH + 2; // justo debajo
-                        drawList->AddText({tx, ty}, IM_COL32(255, 255, 0, 255), txt.c_str());
-                        segmentStart = i + 1;
+                        float tx = x + (boxW - tw)/2;
+                        float ty = y + boxH + 2;   // justo debajo
+                        drawList->AddText({tx, ty}, IM_COL32(255,255,0,255), txt.c_str());
+                        segmentStart = i+1;
                     }
 
                     x += boxW + spacing;
                 }
 
-                // Reserva el espacio para el scroll
+                // Reserva el espacio para el scroll 
                 ImGui::Dummy(ImVec2(
-                    history.size() * (boxW + spacing),
-                    totalHeight));
+                    history.size() * (boxW+spacing),
+                    totalHeight
+                ));
 
                 ImGui::EndChild();
             }
-        }
-        else
-        {
+        } else {
             // —————— PANEL DE SINCRONIZACIÓN ——————
-            if (ImGui::CollapsingHeader("Simulación (Sincronización)"))
-            {
+            if (ImGui::CollapsingHeader("Simulación (Sincronización)")) {
                 ImGui::Text("Ciclo: %d", engine_.currentCycle());
 
                 static int syncFilter = 0;
                 ImGui::Text("Ver:");
-
-                ImGui::SameLine();
-                ImGui::RadioButton("Mutex", &syncFilter, 0);
-                ImGui::SameLine();
-                ImGui::RadioButton("Semáforos", &syncFilter, 1);
+                
+                ImGui::SameLine(); ImGui::RadioButton("Mutex",     &syncFilter, 0);
+                ImGui::SameLine(); ImGui::RadioButton("Semáforos", &syncFilter, 1);
 
                 ImGui::Separator();
                 ImGui::Text("Leyenda:");
                 ImGui::SameLine();
 
-                // Sacamos el puntero al list para dibujar
-                ImDrawList *dl = ImGui::GetWindowDrawList();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
                 // Tamaño de cada ícono
                 const float iconSize = 16.0f;
                 // Espacio entre íconos y texto
-                const float pad = 4.0f;
+                const float pad     = 4.0f;
 
-                // — LOCK (triángulo hacia abajo, celeste) —
-                ImGui::Text(" LOCK");
-                ImGui::SameLine();
+                // — ADQUIRE (triángulo hacia abajo, celeste) —
+                ImGui::Text("ADQUIRE"); ImGui::SameLine();
                 {
                     ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImU32 col = IM_COL32(0, 200, 255, 255);
+                    ImU32 col = IM_COL32(0,200,255,255);
                     dl->AddTriangleFilled(
-                        {p.x, p.y + iconSize},
-                        {p.x + iconSize, p.y + iconSize},
-                        {p.x + iconSize * 0.5f, p.y},
-                        col);
-                    ImGui::Dummy({iconSize + pad, iconSize});
+                        { p.x,            p.y + iconSize },
+                        { p.x + iconSize, p.y + iconSize },
+                        { p.x + iconSize*0.5f, p.y },
+                        col
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
                 }
 
-                // — UNLOCK (círculo, verde) —
-                ImGui::Text("   UNLOCK");
-                ImGui::SameLine();
+                // — RELEASE (círculo verde) —
+                ImGui::Text("RELEASE"); ImGui::SameLine();
                 {
                     ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImU32 col = IM_COL32(0, 200, 0, 255);
+                    ImU32 col = IM_COL32(0,200,0,255);
                     dl->AddCircleFilled(
-                        {p.x + iconSize * 0.5f, p.y + iconSize * 0.5f},
-                        iconSize * 0.5f, col);
-                    ImGui::Dummy({iconSize + pad, iconSize});
+                        { p.x + iconSize*0.5f, p.y + iconSize*0.5f },
+                        iconSize*0.5f, col
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
                 }
 
-                // — WAIT (cruz, ahora roja) —
-                ImGui::Text(" WAIT");
-                ImGui::SameLine();
+                // — WAIT (cruz roja) —
+                ImGui::Text(" WAIT"); ImGui::SameLine();
                 {
                     ImVec2 p1 = ImGui::GetCursorScreenPos();
-                    ImU32 col = IM_COL32(255, 0, 0, 255); // rojo
-                    dl->AddLine({p1.x, p1.y},
-                                {p1.x + iconSize, p1.y + iconSize}, col, 2.0f);
-                    dl->AddLine({p1.x, p1.y + iconSize},
-                                {p1.x + iconSize, p1.y}, col, 2.0f);
-                    ImGui::Dummy({iconSize + pad, iconSize});
+                    ImU32 col = IM_COL32(255,0,0,255);  // rojo
+                    dl->AddLine({ p1.x,           p1.y },
+                                { p1.x + iconSize, p1.y + iconSize }, col, 2.0f);
+                    dl->AddLine({ p1.x,           p1.y + iconSize },
+                                { p1.x + iconSize, p1.y }, col, 2.0f);
+                    ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
                 }
 
-                // — WAIT OK (cuadrado, verde) —
-                ImGui::Text("ACCESSED");
-                ImGui::SameLine();
+                // — ACCESSED (cuadrado verde) —
+                ImGui::Text("ACCESSED"); ImGui::SameLine();
                 {
                     ImVec2 p = ImGui::GetCursorScreenPos();
                     dl->AddRectFilled(
-                        {p.x, p.y},
-                        {p.x + iconSize, p.y + iconSize},
-                        IM_COL32(0, 200, 0, 255));
-                    ImGui::Dummy({iconSize + pad, iconSize});
+                        { p.x, p.y },
+                        { p.x + iconSize, p.y + iconSize },
+                        IM_COL32(0,200,0,255)
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
                 }
 
                 // — SIGNAL (triángulo invertido, amarillo) —
-                ImGui::Text(" SIGNAL");
-                ImGui::SameLine();
+                ImGui::Text(" SIGNAL"); ImGui::SameLine();
                 {
                     ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImU32 col = IM_COL32(255, 200, 0, 255); // amarillo
-                    // Triángulo apuntando hacia abajo (invertido)
+                    ImU32 col = IM_COL32(255,200,0,255);  
                     dl->AddTriangleFilled(
-                        {p.x, p.y + iconSize},
-                        {p.x + iconSize, p.y + iconSize},
-                        {p.x + iconSize * 0.5f, p.y},
-                        col);
-                    ImGui::Dummy({iconSize + pad, iconSize});
+                        { p.x,            p.y + iconSize },
+                        { p.x + iconSize, p.y + iconSize },
+                        { p.x + iconSize*0.5f, p.y },
+                        col
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
                 }
 
@@ -350,14 +326,14 @@ void ImGuiLayer::renderLoop()
                 // ----------------------------------------
                 // 1) Inicio del área scrollable
                 // ----------------------------------------
-                const float blockW = 20.0f;
-                const float blockH = 20.0f;
-                const float spX = 2.0f;
-                const float spY = 5.0f;
-                float labelWidth = 60.0f; // espacio fijo para los nombres
+                const float blockW   = 20.0f;
+                const float blockH   = 20.0f;
+                const float spX      = 2.0f;
+                const float spY      = 5.0f;
+                float  labelWidth    = 60.0f;  
 
                 ImGui::BeginChild("SyncTimeline", ImVec2(0, 200),
-                                  true, ImGuiWindowFlags_HorizontalScrollbar);
+                                true, ImGuiWindowFlags_HorizontalScrollbar);
 
                 // Origen del área de dibujo (esquina superior izquierda del grid)
                 ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -365,17 +341,15 @@ void ImGuiLayer::renderLoop()
                 // ----------------------------------------
                 // 2) DIBUJAR ETIQUETAS DE CICLO (Encabezado)
                 // ----------------------------------------
-                auto const &log = engine_.getSyncLog();
+                auto const& log = engine_.getSyncLog();
                 int maxCycle = log.empty() ? 0 : log.back().cycle;
-                for (int c = 0; c <= maxCycle; ++c)
-                {
+                for (int c = 0; c <= maxCycle; ++c) {
                     float x = origin.x + labelWidth + c * (blockW + spX);
                     float y = origin.y;
-                    // Centra el número encima de cada columna
                     char buf[8];
-                    int tx = std::snprintf(buf, sizeof(buf), "%d", c);
+                    int  tx = std::snprintf(buf, sizeof(buf), "%d", c);
                     ImVec2 tsz = ImGui::CalcTextSize(buf);
-                    dl->AddText({x + (blockW - tsz.x) / 2, y}, IM_COL32(200, 200, 200, 255), buf);
+                    dl->AddText({ x + (blockW - tsz.x)/2, y }, IM_COL32(200,200,200,255), buf);
                 }
 
                 // ----------------------------------------
@@ -383,103 +357,89 @@ void ImGuiLayer::renderLoop()
                 // ----------------------------------------
                 // Reserva fila para cada PID en orden de aparición
                 std::unordered_map<int, float> rowY;
-                float nextY = origin.y + blockH + spY; // + bloque de encabezado
-                for (int i = 0; i < (int)processes_->size(); ++i)
-                {
+                float nextY = origin.y + blockH + spY;  
+                for (int i = 0; i < (int)processes_->size(); ++i) {
                     rowY[i] = nextY;
-                    // Dibuja el nombre en la columna de etiquetas
                     dl->AddText(
-                        {origin.x, nextY + (blockH - ImGui::GetFontSize()) * 0.5f},
-                        IM_COL32(255, 255, 255, 255),
-                        engine_.procs()[i].pid.c_str());
+                    { origin.x, nextY + (blockH - ImGui::GetFontSize())*0.5f },
+                    IM_COL32(255,255,255,255),
+                    engine_.procs()[i].pid.c_str()
+                    );
                     nextY += blockH + spY;
                 }
 
                 // ----------------------------------------
                 // 4) DIBUJAR BLOQUES DE EVENTOS
                 // ----------------------------------------
-                bool viewMutex = (syncFilter == 0);
+                bool   viewMutex = (syncFilter == 0);
 
-                const ImU32 colLock = IM_COL32(0, 200, 255, 255);
-                const ImU32 colUnlock = IM_COL32(0, 150, 0, 255);
-                const ImU32 colWait = IM_COL32(200, 0, 0, 255);
-                const ImU32 colSignal = IM_COL32(255, 200, 0, 255);
+                const ImU32 colLock    = IM_COL32(0,200,255,255);
+                const ImU32 colUnlock  = IM_COL32(0,150,0,255);
+                const ImU32 colWait    = IM_COL32(200,0,0,255);
+                const ImU32 colSignal  = IM_COL32(255,200,0,255);
 
-                const float semRadius = blockW * 0.4f; // radio común a todos
-                const float halfSize = semRadius;
+                const float semRadius = blockW * 0.4f; 
+                const float halfSize  = semRadius; 
 
-                for (auto const &e : log)
-                {
+                for (auto const& e : log) {
                     bool isM = engine_.isMutex(e.res);
-                    if (viewMutex != isM)
-                        continue;
+                    if (viewMutex != isM) continue;
 
-                    float x = origin.x + labelWidth + e.cycle * (blockW + spX);
+                    float x = origin.x + labelWidth + e.cycle*(blockW+spX);
                     float y = rowY[e.pidIdx];
-                    ImVec2 center = {x + blockW * 0.5f, y + blockH * 0.5f};
+                    ImVec2 center = { x+blockW*0.5f, y+blockH*0.5f };
 
-                    if (isM)
-                    {
-                        // ————— MODO MUTEX (igual que lo tenías) —————
-                        if (e.action == SyncAction::LOCK)
-                        {
-                            if (e.result == SyncResult::ACCESSED)
-                            {
-                                // Triángulo celeste → LOCK exitoso (ahora con halfSize)
+                    if (isM) {
+                        // ————— MODO MUTEX —————
+                        if (e.action == SyncAction::ADQUIRE) {
+                            if (e.result == SyncResult::ACCESSED) {
                                 dl->AddTriangleFilled(
-                                    {center.x - halfSize, center.y + halfSize},
-                                    {center.x + halfSize, center.y + halfSize},
-                                    {center.x, center.y - halfSize},
-                                    colLock);
-                            }
-                            else
-                            {
-                                ImVec2 a1 = {center.x - halfSize, center.y - halfSize};
-                                ImVec2 a2 = {center.x + halfSize, center.y + halfSize};
-                                ImVec2 b1 = {center.x - halfSize, center.y + halfSize};
-                                ImVec2 b2 = {center.x + halfSize, center.y - halfSize};
+                                    { center.x - halfSize, center.y + halfSize },
+                                    { center.x + halfSize, center.y + halfSize },
+                                    { center.x,           center.y - halfSize },
+                                    colLock
+                                );
+                            } else {
+                                ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
+                                ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
+                                ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
                                 dl->AddLine(a1, a2, colWait, 2.0f);
                                 dl->AddLine(b1, b2, colWait, 2.0f);
                             }
                         }
-                        else if (e.action == SyncAction::UNLOCK)
-                        {
-                            // Círculo verde → liberación
+                        else if (e.action == SyncAction::RELEASE) {
                             dl->AddCircleFilled(
                                 center,
-                                semRadius, // mismo radio
-                                colUnlock);
+                                semRadius,  
+                                colUnlock
+                            );
                         }
-                    }
-                    else
-                    {
-                        // SEMÁFORO
-                        if (e.action == SyncAction::WAKE ||
+
+                    } else {
+                         // ————— MODO SEMÁFORO —————
+                        if (e.action == SyncAction::WAKE || 
                             (e.action == SyncAction::WAIT && e.result == SyncResult::ACCESSED))
                         {
-                            // ■ cuadrado verde de semSize × semSize
-                            ImVec2 p0 = {center.x - halfSize, center.y - halfSize};
-                            ImVec2 p1 = {center.x + halfSize, center.y + halfSize};
-                            dl->AddRectFilled(p0, p1, IM_COL32(0, 200, 0, 255));
-                        }
-                        else if (e.action == SyncAction::WAIT && e.result == SyncResult::WAITING)
-                        {
-                            // ✖ cruz roja de tamaño semSize
-                            ImVec2 a1 = {center.x - halfSize, center.y - halfSize};
-                            ImVec2 a2 = {center.x + halfSize, center.y + halfSize};
-                            ImVec2 b1 = {center.x - halfSize, center.y + halfSize};
-                            ImVec2 b2 = {center.x + halfSize, center.y - halfSize};
+                            ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                            ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                            dl->AddRectFilled(p0, p1, IM_COL32(0,200,0,255));
+
+                        } else if (e.action == SyncAction::WAIT && e.result == SyncResult::WAITING) {
+                            ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
+                            ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
+                            ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
+                            ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
                             dl->AddLine(a1, a2, colWait, 2.0f);
                             dl->AddLine(b1, b2, colWait, 2.0f);
-                        }
-                        else if (e.action == SyncAction::SIGNAL)
-                        {
-                            // ▲ triángulo amarillo de base semSize, mismo radio que mutex
+
+                        } else if (e.action == SyncAction::SIGNAL) {
                             dl->AddTriangleFilled(
-                                {center.x - halfSize, center.y + halfSize},
-                                {center.x + halfSize, center.y + halfSize},
-                                {center.x, center.y - halfSize},
-                                colSignal);
+                                { center.x - halfSize, center.y + halfSize },
+                                { center.x + halfSize, center.y + halfSize },
+                                { center.x,           center.y - halfSize },
+                                colSignal
+                            );
                         }
                     }
                 }
@@ -487,78 +447,66 @@ void ImGuiLayer::renderLoop()
                 // ----------------------------------------
                 // 5) EXPANDIR PARA SCROLL HORIZONTAL
                 // ----------------------------------------
-                float totalW = labelWidth + (maxCycle + 1) * (blockW + spX);
+                float totalW = labelWidth + (maxCycle+1)*(blockW + spX);
                 ImGui::Dummy(ImVec2(totalW, 0.0f));
 
                 ImGui::EndChild();
 
-                if (ImGui::CollapsingHeader("Estado de Recursos"))
-                {
+                if (ImGui::CollapsingHeader("Estado de Recursos")) {
                     // --- MUTEXES ---
                     ImGui::Text("Mutexes:");
-                    for (auto const &[name, m] : engine_.getMutexes())
-                    {
+                    for (auto const& [name, m] : engine_.getMutexes()) {
                         ImGui::Bullet();
-                        if (m.locked)
-                        {
-                            // Muestro nombre y dueño
-                            const std::string &ownerPid =
+                        if (m.locked) {
+                            // Muestra nombre y dueño
+                            const std::string& ownerPid = 
                                 (m.ownerIdx >= 0 ? engine_.procs()[m.ownerIdx].pid : "??");
                             ImGui::Text("%s: LOCKED por %s", name.c_str(), ownerPid.c_str());
 
-                            // Muestro la cola de espera con los nombres
-                            if (!m.waitQueue.empty())
-                            {
+                            // Muestra la cola de espera con los nombres
+                            if (!m.waitQueue.empty()) {
                                 ImGui::Text("  Cola de espera:");
                                 ImGui::SameLine();
-                                for (size_t i = 0; i < m.waitQueue.size(); ++i)
-                                {
-                                    const auto &pid = engine_.procs()[m.waitQueue[i]].pid;
-                                    ImGui::Text("%s%s", pid.c_str(),
-                                                i + 1 < m.waitQueue.size() ? ", " : "");
-                                    if (i + 1 < m.waitQueue.size())
+                                for (size_t i = 0; i < m.waitQueue.size(); ++i) {
+                                    const auto& pid = engine_.procs()[ m.waitQueue[i] ].pid;
+                                    ImGui::Text("%s%s", pid.c_str(), 
+                                                i+1 < m.waitQueue.size() ? ", " : "");
+                                    if (i+1 < m.waitQueue.size())
                                         ImGui::SameLine();
                                 }
-                            }
-                            else
-                            {
+                            } else {
                                 ImGui::Text("  Cola de espera: (vacía)");
                             }
-                        }
-                        else
-                        {
+                        } else {
                             ImGui::Text("%s: LIBRE", name.c_str());
                         }
+
                     }
                     ImGui::Separator();
                     // --- SEMAPHORES ---
                     ImGui::Text("Semáforos:");
-                    for (auto const &[name, s] : engine_.getSemaphores())
-                    {
+                    for (auto const& [name, s] : engine_.getSemaphores()) {
                         ImGui::Bullet();
-                        // Muestro el valor actual
+                        // Muestra el valor actual
                         ImGui::Text("%s: valor = %d", name.c_str(), s.count);
 
-                        // Muestro la cola de espera con los PIDs
-                        if (!s.waitQueue.empty())
-                        {
+                        // Muestra la cola de espera con los PIDs
+                        if (!s.waitQueue.empty()) {
                             ImGui::Text("  Cola de espera:");
                             ImGui::SameLine();
-                            for (size_t i = 0; i < s.waitQueue.size(); ++i)
-                            {
-                                const auto &pid = engine_.procs()[s.waitQueue[i]].pid;
+                            for (size_t i = 0; i < s.waitQueue.size(); ++i) {
+                                const auto& pid = engine_.procs()[ s.waitQueue[i] ].pid;
                                 ImGui::Text("%s%s",
                                             pid.c_str(),
                                             (i + 1 < s.waitQueue.size()) ? ", " : "");
                                 if (i + 1 < s.waitQueue.size())
                                     ImGui::SameLine();
                             }
-                        }
-                        else
-                        {
+                        } else {
                             ImGui::Text("  Cola de espera: (vacía)");
                         }
                     }
+
                 }
             }
         }
@@ -574,43 +522,39 @@ void ImGuiLayer::renderLoop()
     }
 }
 
-void ImGuiLayer::showDataPanel()
-{
+void ImGuiLayer::showDataPanel() {
     ImGui::Begin("Data Viewer");
 
     // Lista de procesos
-    if (ImGui::CollapsingHeader("Processes"))
-    {
-        for (const auto &p : *processes_)
-        {
+    if (ImGui::CollapsingHeader("Processes")) {
+        for (const auto& p : *processes_) {
             ImGui::BulletText(
-                "%s: burst=%d, arrival=%d, priority=%d",
-                p.pid.c_str(), p.burst, p.arrival, p.priority);
+              "%s: burst=%d, arrival=%d, priority=%d",
+              p.pid.c_str(), p.burst, p.arrival, p.priority
+            );
         }
     }
 
     // Lista de recursos
-    if (ImGui::CollapsingHeader("Resources"))
-    {
-        for (const auto &r : *resources_)
-        {
+    if (ImGui::CollapsingHeader("Resources")) {
+        for (const auto& r : *resources_) {
             ImGui::BulletText(
-                "%s: count=%d",
-                r.name.c_str(), r.count);
+              "%s: count=%d",
+              r.name.c_str(), r.count
+            );
         }
     }
 
     // Lista de acciones
-    if (ImGui::CollapsingHeader("Actions"))
-    {
-        for (const auto &a : *actions_)
-        {
+    if (ImGui::CollapsingHeader("Actions")) {
+        for (const auto& a : *actions_) {
             ImGui::BulletText(
-                "%s: %s %s @ cycle %d",
-                a.pid.c_str(),
-                a.type.c_str(),
-                a.res.c_str(),
-                a.cycle);
+              "%s: %s %s @ cycle %d",
+              a.pid.c_str(),
+              a.type.c_str(),
+              a.res.c_str(),
+              a.cycle
+            );
         }
     }
 
@@ -627,8 +571,7 @@ void ImGuiLayer::cleanup()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    if (window)
-    {
+    if (window) {
         glfwDestroyWindow(window);
         glfwTerminate();
     }

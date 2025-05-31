@@ -108,7 +108,6 @@ void SimulationEngine::tick() {
 
     } else {
         // —————— MODO SYNCHRONIZATION ——————
-        // sólo procesar acciones de sincronización
         handleSyncActions();
     }
 }
@@ -170,21 +169,21 @@ void SimulationEngine::handleSyncActions() {
                 logEvent(SyncResult::WAITING, SyncAction::READ);
             }
 
-        } else if (act.type == "LOCK") {
+        } else if (act.type == "ADQUIRE") {
 
             auto &m = sync_.mutexes[act.res];
 
             // Ya es el dueño → error
             if (m.ownerIdx == idx) {
                 std::cerr << "[Error] Proceso " << idx << " ya es dueño del mutex " << act.res
-                        << " y volvió a hacer LOCK." << std::endl;
+                        << " y volvió a hacer ADQUIRE." << std::endl;
                 continue;
             }
 
-            // Acaba de recibir el mutex por UNLOCK → no debe volver a hacer LOCK
+            // Acaba de recibir el mutex por RELEASE → no debe volver a hacer ADQUIRE
             if (procs_[idx].justGrantedMutex) {
                 std::cerr << "[Error] Proceso " << idx << " ya recibió el mutex automáticamente en "
-                        << "el ciclo anterior, no debe volver a pedir LOCK." << std::endl;
+                        << "el ciclo anterior, no debe volver a pedir ADQUIRE." << std::endl;
                 continue;
             }
 
@@ -193,48 +192,45 @@ void SimulationEngine::handleSyncActions() {
                 // si estaba libre, me lo quedo
                 m.locked   = true;
                 m.ownerIdx = idx;
-                logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::LOCK);
+                logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::ADQUIRE);
             } else {
-                // si estaba ocupado, me bloqueo hasta un unlock futuro
+                // si estaba ocupado, me bloqueo hasta un RELEASE futuro
                 p.state = ProcState::BLOCKED;
                 m.waitQueue.push_back(idx);
-                logEventAt(cycle_, SyncResult::WAITING, SyncAction::LOCK);
+                logEventAt(cycle_, SyncResult::WAITING, SyncAction::ADQUIRE);
             }
 
-        } else if (act.type == "UNLOCK") {
+        } else if (act.type == "RELEASE") {
             auto &m = sync_.mutexes[act.res];
-            // sólo el dueño puede hacer unlock
+            // sólo el dueño puede hacer RELEASE
             if (m.ownerIdx != idx) 
                 continue;
 
-            // 1) dibujo el UNLOCK del dueño actual
-            logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::UNLOCK);
+            // dibuja el RELEASE del dueño actual
+            logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::RELEASE);
 
-            // 2) si hay alguien en la cola, cédelo inmediatamente
+            // si hay alguien en la cola, lo cede inmediatamente
             if (!m.waitQueue.empty()) {
                 int next = m.waitQueue.front();
                 m.waitQueue.pop_front();
-
                 // reasignar dueño sin liberar el mutex
                 m.ownerIdx = next;
                 // (m.locked ya está true)
                 procs_[next].justGrantedMutex = true;
-
                 // despierta a next
                 procs_[next].state = ProcState::READY;
                 readyQueue_.push_back(next);
-
-                // 3) dibujo el LOCK automático para el despertado
+                // dibuja el ADQUIRE automático para el despertado
                 syncLog_.push_back({
                     cycle_,            // mismo ciclo
                     next,              // nuevo dueño
                     act.res,
                     SyncResult::ACCESSED,
-                    SyncAction::LOCK
+                    SyncAction::ADQUIRE
                 });
                 procs_[next].justGrantedMutex = false;
             } else {
-                // 4) si no hay nadie esperando, libero completamente
+                // si no hay nadie esperando, se libera completamente
                 m.locked   = false;
                 m.ownerIdx = -1;
             }
@@ -253,11 +249,11 @@ void SimulationEngine::handleSyncActions() {
 
         } else if (act.type == "SIGNAL") {
             auto &s = sync_.semaphores[act.res];
-            // 1) dibujo la señalización del que libera
+            // dibuja la señalización del que libera
             logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::SIGNAL);
 
             if (!s.waitQueue.empty()) {
-                // 2) despierto exactamente a uno y le concedo el recurso
+                // despierta exactamente a uno y le concede el recurso
                 int next = s.waitQueue.front();
                 s.waitQueue.pop_front();
 
@@ -273,13 +269,12 @@ void SimulationEngine::handleSyncActions() {
                     SyncAction::WAKE
                 });
             } else {
-                // 3) si nadie esperaba, incremento el contador
+                // si nadie esperaba, incrementa el contador
                 s.count++;
             }
         }
     }
 
-    // —— Finalmente, ordenar para el rendering —— 
     std::sort(syncLog_.begin(), syncLog_.end(),
         [](auto const &a, auto const &b){
             if (a.cycle != b.cycle) return a.cycle < b.cycle;
