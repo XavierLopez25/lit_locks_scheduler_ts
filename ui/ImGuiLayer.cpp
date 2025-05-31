@@ -119,6 +119,10 @@ void ImGuiLayer::renderLoop()
             if (engine_.isFinished()) running_ = false;
         }
 
+        //---- Variables para el panel de métricas de calendarización ----
+        static bool selected[5] = { true, false, false, false, false };  // FCFS activo por defecto
+        static const char* algoNames[5] = { "FCFS", "SJF", "SRT", "RR", "Priority" };
+
         if (mode == 0) {
             // —————— PANEL DE CALENDARIZACIÓN ——————
             if (ImGui::CollapsingHeader("Simulación (Calendarización)")) {
@@ -230,6 +234,54 @@ void ImGuiLayer::renderLoop()
                 ));
 
                 ImGui::EndChild();
+            }
+        } 
+        if (ImGui::CollapsingHeader("Resumen de métricas de calendarización")) {
+            ImGui::Text("Seleccione los algoritmos a comparar:");
+            for (int i = 0; i < 5; ++i) {
+                ImGui::Checkbox(algoNames[i], &selected[i]);
+                if (i < 4) ImGui::SameLine();
+            }
+
+            // Slider para configurar Quantum (si se selecciona RR)
+            static int quantumForComparison = 1;
+            bool rrSelected = selected[static_cast<int>(SchedulingAlgo::RR)];
+            if (rrSelected) {
+                ImGui::SliderInt("Quantum (para RR)", &quantumForComparison, 1, 10);
+            }
+
+            static bool showResults = false;
+            if (ImGui::Button("Comparar")) {
+                showResults = true;
+            }
+
+            if (showResults) {
+                ImGui::Separator();
+                ImGui::Text("Resultados (avg waiting time):");
+
+                for (int i = 0; i < 5; ++i) {
+                    if (!selected[i]) continue;
+
+                    // 1. Configurar algoritmo
+                    engine_.setAlgorithm(static_cast<SchedulingAlgo>(i));
+
+                    // Si es RR, aplicar quantum configurado
+                    if (i == static_cast<int>(SchedulingAlgo::RR)) {
+                        engine_.rrQuantum_ = quantumForComparison;
+                    }
+
+                    // 2. Resetear simulación
+                    engine_.reset();
+
+                    // 3. Ejecutar simulación completa
+                    while (!engine_.isFinished()) {
+                        engine_.tick();
+                    }
+
+                    // 4. Calcular y mostrar métrica
+                    float avg = engine_.getAverageWaitingTime();
+                    ImGui::BulletText("%s: %.2f ciclos", algoNames[i], avg);
+                }
             }
         } else {
             // —————— PANEL DE SINCRONIZACIÓN ——————
