@@ -28,11 +28,16 @@ void SimulationEngine::reset() {
     cycle_            = -1;
     rrCounter_        = 0;
     runningIdx_       = -1;
-    procs_            = origProcs_;
     res_              = origRes_;
     acts_             = origActs_;
     readyQueue_.clear();
     executionHistory_.clear();
+    procs_            = origProcs_;
+
+    for (auto& p : procs_) {
+        p.remaining = p.burst;          // Tiempo restante de ejecución
+        p.completionTime = -1;          // Aún no se ha completado
+    }
 
     if (algo_ == SchedulingAlgo::SJF ||
         algo_ == SchedulingAlgo::PRIORITY) {
@@ -67,7 +72,7 @@ bool SimulationEngine::isMutex(const std::string& name) const {
 
 bool SimulationEngine::isFinished() const {
     bool allDone = std::all_of(procs_.begin(), procs_.end(),
-        [](auto& p){ return p.burst == 0; });
+        [](const auto& p){ return p.remaining <= 0; });
     return allDone && runningIdx_ < 0 && readyQueue_.empty();
 }
 
@@ -296,59 +301,105 @@ void SimulationEngine::scheduleNext() {
 
         // Algoritmo Shortest Job Fist
         case SchedulingAlgo::SJF:
-        if (runningIdx_<0 && !readyQueue_.empty()) {
-            // busca el índice en readyQueue_ con menor burst
-            auto it = std::min_element(
-                readyQueue_.begin(), readyQueue_.end(),
-                [&](int a, int b){
-                    return procs_[a].burst < procs_[b].burst;
+        {
+            if (runningIdx_ < 0 && !readyQueue_.empty()) {
+                auto it = std::min_element(
+                    readyQueue_.begin(), readyQueue_.end(),
+                    [&](int a, int b) {
+                        bool aReady = procs_[a].arrival <= cycle_;
+                        bool bReady = procs_[b].arrival <= cycle_;
+
+                        if (aReady && !bReady) return true;
+                        if (!aReady && bReady) return false;
+                        if (!aReady && !bReady) return false; // ninguno listo aún
+
+                        return procs_[a].burst < procs_[b].burst;
+                    }
+                );
+
+                // Si alguno estaba listo
+                if (procs_[*it].arrival <= cycle_) {
+                    runningIdx_ = *it;
+                    readyQueue_.erase(it);
                 }
-            );
-            runningIdx_ = *it;
-            readyQueue_.erase(it);
+            }
         }
         break;
 
         // Algoritmo Shortest Remaining Time (SRT)
         case SchedulingAlgo::SRT:
         {
-            if (runningIdx_ >= 0){
-                readyQueue_.push_back(runningIdx_);
-                runningIdx_ = -1;
+            // Reunir procesos disponibles
+            std::vector<int> available;
+            for (int i : readyQueue_) {
+                if (procs_[i].arrival <= cycle_) {
+                    available.push_back(i);
+                }
             }
 
-            if(!readyQueue_.empty()){
+            // Incluir el running actual si sigue vivo y llegó
+            if (runningIdx_ >= 0 && procs_[runningIdx_].arrival <= cycle_) {
+                available.push_back(runningIdx_);
+            }
+
+            if (!available.empty()) {
+                // Elegir el que tenga menor remaining time
                 auto it = std::min_element(
-                    readyQueue_.begin(), readyQueue_.end(),
-                    [&](int a, int b){
-                        return procs_[a].burst < procs_[b].burst;
+                    available.begin(), available.end(),
+                    [&](int a, int b) {
+                        return procs_[a].remaining < procs_[b].remaining;
                     }
                 );
-                runningIdx_ = *it;
-                readyQueue_.erase(it);
-            }
 
+                int chosen = *it;
+
+                if (chosen != runningIdx_) {
+                    // Preempt → si el actual no es el mismo
+                    if (runningIdx_ >= 0)
+                        readyQueue_.push_back(runningIdx_);
+
+                    // Remove from readyQueue_
+                    auto pos = std::find(readyQueue_.begin(), readyQueue_.end(), chosen);
+                    if (pos != readyQueue_.end())
+                        readyQueue_.erase(pos);
+
+                    runningIdx_ = chosen;
+                }
+            } else {
+                // Nada listo
+                runningIdx_ = -1;
+            }
         }
         break;
 
         //Algoritmo Priority Scheduling
         case SchedulingAlgo::PRIORITY:
         {
-            if (runningIdx_ >= 0) {
-                readyQueue_.push_back(runningIdx_);
-                runningIdx_ = -1;
+            int nextIdx = -1;
+
+            // Buscar el más prioritario entre los disponibles
+            for (int i : readyQueue_) {
+                if (procs_[i].arrival <= cycle_) { // ← AGREGAR ESTA CONDICIÓN
+                    if (nextIdx == -1 || procs_[i].priority < procs_[nextIdx].priority) {
+                        nextIdx = i;
+                    }
+                }
             }
 
-            if (!readyQueue_.empty()) {
-                auto it = std::min_element(
-                    readyQueue_.begin(), readyQueue_.end(),
-                    [&](int a, int b){
-                        return procs_[a].priority < procs_[b].priority;
-                    }
-                );
-                runningIdx_ = *it;
-                readyQueue_.erase(it);
+            // Ver si hay uno más prioritario que el actual
+            if (nextIdx >= 0 &&
+                (runningIdx_ < 0 || procs_[nextIdx].priority < procs_[runningIdx_].priority))
+            {
+                if (runningIdx_ >= 0)
+                    readyQueue_.push_back(runningIdx_);
+
+                runningIdx_ = nextIdx;
+                auto pos = std::find(readyQueue_.begin(), readyQueue_.end(), nextIdx);
+                if (pos != readyQueue_.end())
+                    readyQueue_.erase(pos);
             }
+
+            // Si no hay nadie más prioritario, continuar el actual
         }
         break;
 
@@ -385,8 +436,8 @@ float SimulationEngine::getAverageWaitingTime() const {
     }
 
     for (const auto& proc : procs_) {
-        if (firstAppearance.count(proc.pid)) {
-            int wait = firstAppearance[proc.pid] - proc.arrival;
+        if (firstAppearance.count(proc.pid) && proc.completionTime != -1) {
+            int wait = proc.completionTime - proc.arrival - proc.burst;
             total += wait;
             count++;
         }
@@ -397,9 +448,15 @@ float SimulationEngine::getAverageWaitingTime() const {
 
 void SimulationEngine::executeRunning() {
     if (runningIdx_ < 0) return;
-    procs_[runningIdx_].burst--;
-    rrCounter_++;
-    if (procs_[runningIdx_].burst <= 0) {
+
+    auto& p = procs_[runningIdx_];
+    p.remaining--;
+
+    if (algo_ == SchedulingAlgo::RR)
+        rrCounter_++;
+
+    if (p.remaining <= 0 && p.completionTime == -1) {
+        p.completionTime = cycle_ + 1;
         runningIdx_ = -1;
         rrCounter_ = 0;
     }

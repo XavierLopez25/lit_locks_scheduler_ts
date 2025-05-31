@@ -11,7 +11,9 @@ struct Process {
     int arrival;
     int priority;
     bool justGrantedMutex = false;
-    ProcState state = ProcState::READY; 
+    ProcState state = ProcState::READY;
+    int remaining = 0;
+    int completionTime = -1;
 };
 
 struct Mutex {
