@@ -129,11 +129,11 @@ void ImGuiLayer::renderLoop()
                 ImGui::Text("Algoritmo de calendarización:");
                 // RadioButtons para elegir algoritmo 
                 static int algoIdx = 0;
-                ImGui::SameLine(); ImGui::RadioButton("FIFO",     &algoIdx, 0);
-                ImGui::SameLine(); ImGui::RadioButton("SJF",      &algoIdx, 1);
-                ImGui::SameLine(); ImGui::RadioButton("SRT",      &algoIdx, 2);
-                ImGui::SameLine(); ImGui::RadioButton("RR",       &algoIdx, 3);
-                ImGui::SameLine(); ImGui::RadioButton("Priority", &algoIdx, 4);
+                ImGui::SameLine(); ImGui::RadioButton("FIFO##gantt",     &algoIdx, 0);
+                ImGui::SameLine(); ImGui::RadioButton("SJF##gantt",      &algoIdx, 1);
+                ImGui::SameLine(); ImGui::RadioButton("SRT##gantt",      &algoIdx, 2);
+                ImGui::SameLine(); ImGui::RadioButton("RR##gantt",       &algoIdx, 3);
+                ImGui::SameLine(); ImGui::RadioButton("Priority##gantt", &algoIdx, 4);
 
                 if (engine_.getAlgorithm() != static_cast<SchedulingAlgo>(algoIdx)) {
                     engine_.setAlgorithm(static_cast<SchedulingAlgo>(algoIdx));
@@ -235,54 +235,55 @@ void ImGuiLayer::renderLoop()
 
                 ImGui::EndChild();
             }
-        } 
-        if (ImGui::CollapsingHeader("Resumen de métricas de calendarización")) {
-            ImGui::Text("Seleccione los algoritmos a comparar:");
-            for (int i = 0; i < 5; ++i) {
-                ImGui::Checkbox(algoNames[i], &selected[i]);
-                if (i < 4) ImGui::SameLine();
-            }
-
-            // Slider para configurar Quantum (si se selecciona RR)
-            static int quantumForComparison = 1;
-            bool rrSelected = selected[static_cast<int>(SchedulingAlgo::RR)];
-            if (rrSelected) {
-                ImGui::SliderInt("Quantum (para RR)", &quantumForComparison, 1, 10);
-            }
-
-            static bool showResults = false;
-            if (ImGui::Button("Comparar")) {
-                showResults = true;
-            }
-
-            if (showResults) {
-                ImGui::Separator();
-                ImGui::Text("Resultados (avg waiting time):");
-
+            if (ImGui::CollapsingHeader("Resumen de métricas de calendarización")) {
+                ImGui::Text("Seleccione los algoritmos a comparar:");
                 for (int i = 0; i < 5; ++i) {
-                    if (!selected[i]) continue;
-
-                    // 1. Configurar algoritmo
-                    engine_.setAlgorithm(static_cast<SchedulingAlgo>(i));
-
-                    // Si es RR, aplicar quantum configurado
-                    if (i == static_cast<int>(SchedulingAlgo::RR)) {
-                        engine_.rrQuantum_ = quantumForComparison;
-                    }
-
-                    // 2. Resetear simulación
-                    engine_.reset();
-
-                    // 3. Ejecutar simulación completa
-                    while (!engine_.isFinished()) {
-                        engine_.tick();
-                    }
-
-                    // 4. Calcular y mostrar métrica
-                    float avg = engine_.getAverageWaitingTime();
-                    ImGui::BulletText("%s: %.2f ciclos", algoNames[i], avg);
+                    std::string label = std::string(algoNames[i]) + "##cmp";
+                    ImGui::Checkbox(label.c_str(), &selected[i]);
+                    if (i < 4) ImGui::SameLine();
                 }
-            }
+
+                // Slider para configurar Quantum (si se selecciona RR)
+                static int quantumForComparison = 1;
+                bool rrSelected = selected[static_cast<int>(SchedulingAlgo::RR)];
+                if (rrSelected) {
+                    ImGui::SliderInt("Quantum (para RR)##cmp", &quantumForComparison, 1, 10);
+                }
+
+                static bool showResults = false;
+                if (ImGui::Button("Comparar##cmp")) {
+                    showResults = true;
+                }
+
+                if (showResults) {
+                    ImGui::Separator();
+                    ImGui::Text("Resultados (avg waiting time):");
+
+                    for (int i = 0; i < 5; ++i) {
+                        if (!selected[i]) continue;
+
+                        // 1. Configurar algoritmo
+                        engine_.setAlgorithm(static_cast<SchedulingAlgo>(i));
+
+                        // Si es RR, aplicar quantum configurado
+                        if (i == static_cast<int>(SchedulingAlgo::RR)) {
+                            engine_.rrQuantum_ = quantumForComparison;
+                        }
+
+                        // 2. Resetear simulación
+                        engine_.reset();
+
+                        // 3. Ejecutar simulación completa
+                        while (!engine_.isFinished()) {
+                            engine_.tick();
+                        }
+
+                        // 4. Calcular y mostrar métrica
+                        float avg = engine_.getAverageWaitingTime();
+                        ImGui::BulletText("%s: %.2f ciclos", algoNames[i], avg);
+                    }
+                }
+            } 
         } else {
             // —————— PANEL DE SINCRONIZACIÓN ——————
             if (ImGui::CollapsingHeader("Simulación (Sincronización)")) {
