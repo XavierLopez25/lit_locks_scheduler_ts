@@ -1,138 +1,132 @@
-# Simulador2025
+# 📘 Simulador2025
 
-Una aplicación en C++ con Dear ImGui que simula:
+Una aplicación interactiva en **C++** con **Dear ImGui** que simula:
 
-- Algoritmos de calendarización de procesos (FIFO, SJF, SRT, Round-Robin, Priority)  
-- Mecanismos de sincronización (mutex, semáforos)  
-
-Además incluye un parser genérico para cargar desde archivos `.txt` los procesos, recursos y acciones, y un suite de tests con Catch2 para validar el parser.
+- 🧠 Algoritmos de calendarización de procesos: `FIFO`, `SJF`, `SRT`, `Round-Robin`, `Priority`
+- 🔒 Mecanismos de sincronización: `mutex`, `semáforos`
+- 📂 Lectura desde archivos `.txt` para procesos, recursos y acciones
+- 🧪 Tests automatizados con `Catch2`
 
 ---
 
 ## 📋 Requisitos
 
-- **Sistema**: WSL (Ubuntu 20.04+), Linux o macOS  
-- **Compilador**: GCC ≥ 9 / Clang ≥ 10  
-- **CMake**: ≥ 3.10 (recomendado 3.13+)  
-- **Paquetes del sistema** (instálalos en WSL con `sudo apt install`):  
-  ```bash
-  build-essential cmake pkg-config \
-  libglfw3-dev libglew-dev libglu1-mesa-dev mesa-common-dev \
-  libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev
-  ```
+- **Sistema operativo:** Linux, WSL (Ubuntu 20.04+), o macOS
+- **Compilador:** `GCC ≥ 9` o `Clang ≥ 10`
+- **CMake:** `≥ 3.10` (se recomienda 3.13+)
+- **Dependencias del sistema:**
 
-## 🗂️ Estructura de carpetas
+```bash
+sudo apt install build-essential cmake pkg-config \
+libglfw3-dev libglew-dev libglu1-mesa-dev mesa-common-dev \
+libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev
+```
+
+---
+
+## 🗂️ Estructura del Proyecto
 
 ```
 .
-├── CMakeLists.txt           # Configuración general + tests + FetchContent(Catch2)
-├── README.md
-├── data/                    # Archivos de ejemplo (.txt)
+├── CMakeLists.txt
+├── README.md / README.Rmd
+├── compile.sh / run.sh / test.sh
+├── data/
 │   ├── processes.txt
 │   ├── resources.txt
 │   └── actions.txt
-├── external/imgui/          # Dear ImGui (submódulo Git)
-├── include/                 # (opcional) headers comunes
+├── external/imgui/
+├── include/
 ├── src/
-│   ├── main.cpp             # Punto de entrada: carga datos y lanza UI
-│   ├── Parser.h/.cpp        # Parser de procesos, recursos y acciones
+│   ├── main.cpp
+│   ├── Parser.h/.cpp
 │   ├── Process.h
 │   ├── Resource.h
 │   └── Action.h
 ├── ui/
-│   ├── ImGuiLayer.h/.cpp    # Inicialización y bucle de Dear ImGui + GLFW/OpenGL3
+│   └── ImGuiLayer.h/.cpp
 ├── tests/
-│   └── test_parser.cpp      # Suite de tests Catch2 para el parser
-└── build/                   # Directorio de compilación (se crea tras cmake)
+│   └── test_parser.cpp
+└── build/
 ```
 
 ---
 
-## 📐 Formato de los archivos `data/*.txt`
+## 📐 Formato de Archivos `.txt`
 
-* **processes.txt**
-  Cada línea: `<PID>, <BT>, <AT>, <Priority>`
+### `processes.txt`
 
-  ```text
-  P1, 5, 0, 2
-  P2, 3, 1, 1
-  ```
-* **resources.txt**
-  Cada línea: `<RESOURCE_NAME>, <COUNT>`
+```text
+<PID>, <BT>, <AT>, <Priority>
+P1, 5, 0, 2
+P2, 3, 1, 1
+```
 
-  ```text
-  R1, 1
-  R2, 2
-  ```
-* **actions.txt**
-  Cada línea: `<PID>, <ACTION>, <RESOURCE>, <CYCLE>`
+### `resources.txt`
 
-  ```text
-  P1, READ,  R1, 0
-  P2, WRITE, R2, 1
-  ```
+```text
+<RESOURCE_NAME>, <COUNT>
+R1, 1
+R2, 2
+```
+
+### `actions.txt`
+
+```text
+<PID>, <ACTION>, <RESOURCE>, <CYCLE>
+P1, READ,  R1, 0
+P2, WRITE, R2, 1
+```
 
 ---
 
-## ⚙️ Construir el proyecto
+## ⚙️ Construcción del Proyecto
 
 ```bash
 git clone https://github.com/XavierLopez25/lit_locks_scheduler_ts.git
 cd lit_locks_scheduler_ts
 
-# Inicializar ImGui como submódulo
 git submodule add https://github.com/ocornut/imgui.git external/imgui
 git submodule update --init --recursive
 
-# Crear carpeta de build
 mkdir -p build && cd build
-
-# Configurar CMake (define DATA_DIR como ruta absoluta a carpeta data/)
 cmake ..
-
-# Compilar ejecutable principal y tests
 make -j
 ```
 
-> **Nota:**
->
-> * El proyecto ya usa FetchContent para Catch2 y aplica la política CMP0072 para OpenGL/GLVND.
-> * `DATA_DIR` se compila apuntando a `<repo>/data`, de modo que el binario siempre carga desde allí, aun si se ejecuta dentro de `build/`.
+> Nota: `DATA_DIR` se configura automáticamente a la carpeta `data/` del repositorio.
 
 ---
 
-## ▶️ Ejecutar la aplicación
+## ▶️ Ejecución
 
-Primero dale permisos a los scripts de bash:
+### Con interfaz gráfica:
 
 ```bash
 chmod +x compile.sh run.sh test.sh
-```
-
-Luego compila el proyecto:
-
-```bash
 ./compile.sh
-```
-
-Para correr la app con frontend:
-
-```bash
 ./run.sh
 ```
 
-El programa cargará automáticamente:
+### Archivos cargados automáticamente:
 
-* `DATA_DIR/processes.txt`
-* `DATA_DIR/resources.txt`
-* `DATA_DIR/actions.txt`
-
-Si lo prefieres, puedes modificar `main.cpp` para recibir las rutas por argumentos.
+- `data/processes.txt`
+- `data/resources.txt`
+- `data/actions.txt`
 
 ---
 
-## ✅ Ejecutar la suite de tests
+## ✅ Ejecutar Tests
 
 ```bash
 ./test.sh
 ```
+
+Usa `Catch2` para validar el parser con archivos reales. El suite se encuentra en `tests/test_parser.cpp`.
+
+---
+
+## 🔚 Notas Finales
+
+- Puedes modificar `main.cpp` para aceptar rutas de archivo como argumentos.
+- El diseño está pensado para ser fácilmente extensible: puedes añadir nuevos algoritmos, acciones o tipos de recursos sin romper la arquitectura actual.
