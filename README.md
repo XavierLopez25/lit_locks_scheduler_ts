@@ -1,9 +1,3 @@
-
----
-title: "Simulador2025 - README"
-output: github_document
----
-
 # 📘 Simulador2025
 
 Una aplicación interactiva en **C++** con **Dear ImGui** que simula:
