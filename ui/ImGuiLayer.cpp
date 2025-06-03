@@ -255,6 +255,8 @@ void ImGuiLayer::renderLoop()
                     showResults = true;
                 }
 
+                SimulationEngine tempEngine = engine_;  
+                
                 if (showResults) {
                     ImGui::Separator();
                     ImGui::Text("Resultados (avg waiting time):");
@@ -263,23 +265,23 @@ void ImGuiLayer::renderLoop()
                         if (!selected[i]) continue;
 
                         // 1. Configurar algoritmo
-                        engine_.setAlgorithm(static_cast<SchedulingAlgo>(i));
+                        tempEngine.setAlgorithm(static_cast<SchedulingAlgo>(i));
 
                         // Si es RR, aplicar quantum configurado
                         if (i == static_cast<int>(SchedulingAlgo::RR)) {
-                            engine_.rrQuantum_ = quantumForComparison;
+                            tempEngine.rrQuantum_ = quantumForComparison;
                         }
 
                         // 2. Resetear simulación
-                        engine_.reset();
+                        tempEngine.reset();
 
                         // 3. Ejecutar simulación completa
-                        while (!engine_.isFinished()) {
-                            engine_.tick();
+                        while (!tempEngine.isFinished()) {
+                            tempEngine.tick();
                         }
 
                         // 4. Calcular y mostrar métrica
-                        float avg = engine_.getAverageWaitingTime();
+                        float avg = tempEngine.getAverageWaitingTime();
                         ImGui::BulletText("%s: %.2f ciclos", algoNames[i], avg);
                     }
                 }
@@ -369,6 +371,34 @@ void ImGuiLayer::renderLoop()
                         { p.x + iconSize, p.y + iconSize },
                         { p.x + iconSize*0.5f, p.y },
                         col
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
+                    ImGui::SameLine();
+                }
+
+                // — READ (cuadrado azul) —
+                ImGui::Text("READ"); ImGui::SameLine();
+                {
+                    ImVec2 p = ImGui::GetCursorScreenPos();
+                    ImU32 colRead = IM_COL32(0,  0, 255, 255);  // azul puro
+                    dl->AddRectFilled(
+                        { p.x,         p.y },
+                        { p.x + iconSize, p.y + iconSize },
+                        colRead
+                    );
+                    ImGui::Dummy({ iconSize + pad, iconSize });
+                    ImGui::SameLine();
+                }
+
+                // — WRITE (cuadrado morado claro) —
+                ImGui::Text("WRITE"); ImGui::SameLine();
+                {
+                    ImVec2 p = ImGui::GetCursorScreenPos();
+                    ImU32 colWrite = IM_COL32(200, 150, 255, 255);  // morado claro
+                    dl->AddRectFilled(
+                        { p.x,           p.y },
+                        { p.x + iconSize, p.y + iconSize },
+                        colWrite
                     );
                     ImGui::Dummy({ iconSize + pad, iconSize });
                     ImGui::SameLine();
@@ -470,15 +500,45 @@ void ImGuiLayer::renderLoop()
                         }
 
                     } else {
-                         // ————— MODO SEMÁFORO —————
-                        if (e.action == SyncAction::WAKE || 
-                            (e.action == SyncAction::WAIT && e.result == SyncResult::ACCESSED))
-                        {
-                            ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
-                            ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
-                            dl->AddRectFilled(p0, p1, IM_COL32(0,200,0,255));
+                        // ————— MODO SEMÁFORO —————
+                        if (e.action == SyncAction::READ) {
+                            // Si READ tuvo éxito (ACCESSED), dibujamos cuadrado azul. Si fue WAITING, dibujamos la "X" roja.
+                            if (e.result == SyncResult::ACCESSED) {
+                                ImU32 colReadOk = IM_COL32(0, 0, 255, 255);          // azul puro
+                                ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                                dl->AddRectFilled(p0, p1, colReadOk);
+                            } else { // SyncResult::WAITING
+                                // Misma "X" roja que usas para WAIT, porque READ bloqueado es una espera
+                                ImU32 colWait = IM_COL32(200, 0, 0, 255);
+                                ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
+                                ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
+                                ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
+                                dl->AddLine(a1, a2, colWait, 2.0f);
+                                dl->AddLine(b1, b2, colWait, 2.0f);
+                            }
+
+                        } else if (e.action == SyncAction::WRITE) {
+                            // Si WRITE tuvo éxito (ACCESSED), dibujamos cuadrado morado claro. Si fue WAITING, usamos misma "X" roja.
+                            if (e.result == SyncResult::ACCESSED) {
+                                ImU32 colWriteOk = IM_COL32(200, 150, 255, 255);   // morado claro
+                                ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                                dl->AddRectFilled(p0, p1, colWriteOk);
+                            } else { // SyncResult::WAITING
+                                ImU32 colWait = IM_COL32(200, 0, 0, 255);
+                                ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
+                                ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
+                                ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
+                                dl->AddLine(a1, a2, colWait, 2.0f);
+                                dl->AddLine(b1, b2, colWait, 2.0f);
+                            }
 
                         } else if (e.action == SyncAction::WAIT && e.result == SyncResult::WAITING) {
+                            // espera de semáforo
+                            ImU32 colWait = IM_COL32(200, 0, 0, 255);
                             ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
                             ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
                             ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
@@ -487,13 +547,22 @@ void ImGuiLayer::renderLoop()
                             dl->AddLine(b1, b2, colWait, 2.0f);
 
                         } else if (e.action == SyncAction::SIGNAL) {
+                            // señalización de semáforo
                             dl->AddTriangleFilled(
                                 { center.x - halfSize, center.y + halfSize },
                                 { center.x + halfSize, center.y + halfSize },
                                 { center.x,           center.y - halfSize },
                                 colSignal
                             );
+
+                        } else if (e.action == SyncAction::WAKE) {
+                            // “WAKE” incluye el acceso inmediato al recurso
+                            ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                            ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                            ImU32 colWake = IM_COL32(0, 200, 0, 255);  // verde para acceso automático
+                            dl->AddRectFilled(p0, p1, colWake);
                         }
+
                     }
                 }
 

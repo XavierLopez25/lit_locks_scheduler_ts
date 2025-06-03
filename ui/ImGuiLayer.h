@@ -41,7 +41,8 @@ private:
     int winW, winH;
 
     // motor de simulación y control
-    SimulationEngine engine_;   
+    SimulationEngine engine_;
+    
     bool            running_ = false;
     float           speed_   = 1.0f;
 };

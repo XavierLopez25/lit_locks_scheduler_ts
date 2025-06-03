@@ -162,18 +162,39 @@ void SimulationEngine::handleSyncActions() {
                                     a 
                                 });
         };
+
         // —— SEMÁFORO: READ / WRITE ——
         if (act.type == "READ" || act.type == "WRITE") {
-            auto& s = sync_.semaphores[act.res];
+            // Validar que no es un mutex
+            if (sync_.mutexes.count(act.res) > 0) {
+                std::cerr << "[Error] Acción \"" << act.type
+                        << "\" no válida sobre mutex \"" << act.res << "\".\n";
+                return;
+            }
+
+            // Validar que el recurso sí existe como semáforo
+            auto semIt = sync_.semaphores.find(act.res);
+            if (semIt == sync_.semaphores.end()) {
+                std::cerr << "[Error] Recurso \"" << act.res
+                        << "\" no encontrado en semáforos.\n";
+                return;
+            }
+            auto& s = semIt->second;
+
+            // Determinar tipo exacto para log
+            SyncAction accionLog = (act.type == "READ")
+                                ? SyncAction::READ
+                                : SyncAction::WRITE;
+
+            // Intentar adquirir (decrementar contador)
             if (s.count > 0) {
                 s.count--;
-                logEvent(SyncResult::ACCESSED, SyncAction::READ);
+                logEvent(SyncResult::ACCESSED, accionLog);
             } else {
                 p.state = ProcState::BLOCKED;
                 s.waitQueue.push_back(idx);
-                logEvent(SyncResult::WAITING, SyncAction::READ);
+                logEvent(SyncResult::WAITING, accionLog);
             }
-
         } else if (act.type == "ADQUIRE") {
 
             auto &m = sync_.mutexes[act.res];
