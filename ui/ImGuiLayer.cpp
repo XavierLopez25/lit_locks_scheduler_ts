@@ -490,8 +490,19 @@ void ImGuiLayer::renderLoop()
                                 dl->AddLine(a1, a2, colWait, 2.0f);
                                 dl->AddLine(b1, b2, colWait, 2.0f);
                             }
+                        } else if (e.action == SyncAction::READ) {
+                            ImU32 colReadOk = IM_COL32(0, 0, 255, 255);
+                            ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                            ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                            dl->AddRectFilled(p0, p1, colReadOk);
                         }
-                        else if (e.action == SyncAction::RELEASE) {
+                        else if (e.action == SyncAction::WRITE) {
+                            ImU32 colWriteOk = IM_COL32(200, 150, 255, 255);
+                            ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                            ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                            dl->AddRectFilled(p0, p1, colWriteOk);
+
+                        } else if (e.action == SyncAction::RELEASE) {
                             dl->AddCircleFilled(
                                 center,
                                 semRadius,  

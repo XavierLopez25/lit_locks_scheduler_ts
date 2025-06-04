@@ -163,38 +163,44 @@ void SimulationEngine::handleSyncActions() {
                                 });
         };
 
-        // —— SEMÁFORO: READ / WRITE ——
+        // —— LECTURA / ESCRITURA ——
         if (act.type == "READ" || act.type == "WRITE") {
-            // Validar que no es un mutex
+            // Si es semáforo: mantengo la lógica existente
+            if (sync_.semaphores.count(act.res) > 0) {
+                auto &s = sync_.semaphores[act.res];
+                SyncAction accionLog = (act.type == "READ") ? SyncAction::READ : SyncAction::WRITE;
+                if (s.count > 0) {
+                    s.count--;
+                    logEvent(SyncResult::ACCESSED, accionLog);
+                } else {
+                    p.state = ProcState::BLOCKED;
+                    s.waitQueue.push_back(idx);
+                    logEvent(SyncResult::WAITING, accionLog);
+                }
+                continue;
+            }
+
+            // Si es mutex, verificar que el proceso sea owner y luego loguear
             if (sync_.mutexes.count(act.res) > 0) {
-                std::cerr << "[Error] Acción \"" << act.type
-                        << "\" no válida sobre mutex \"" << act.res << "\".\n";
-                return;
+                auto &m = sync_.mutexes[act.res];
+                SyncAction accionLog = (act.type == "READ") ? SyncAction::READ : SyncAction::WRITE;
+
+                // Solo el dueño (ownerIdx) puede hacer READ/WRITE
+                if (m.ownerIdx == idx) {
+                    logEvent(SyncResult::ACCESSED, accionLog);
+                } else {
+                    std::cerr << "[Error] Proceso " << p.pid
+                            << " intenta hacer “" << act.type 
+                            << "” sobre mutex “" << act.res 
+                            << "” sin haber hecho ADQUIRE.\n";
+                }
+                continue;
             }
 
-            // Validar que el recurso sí existe como semáforo
-            auto semIt = sync_.semaphores.find(act.res);
-            if (semIt == sync_.semaphores.end()) {
-                std::cerr << "[Error] Recurso \"" << act.res
-                        << "\" no encontrado en semáforos.\n";
-                return;
-            }
-            auto& s = semIt->second;
-
-            // Determinar tipo exacto para log
-            SyncAction accionLog = (act.type == "READ")
-                                ? SyncAction::READ
-                                : SyncAction::WRITE;
-
-            // Intentar adquirir (decrementar contador)
-            if (s.count > 0) {
-                s.count--;
-                logEvent(SyncResult::ACCESSED, accionLog);
-            } else {
-                p.state = ProcState::BLOCKED;
-                s.waitQueue.push_back(idx);
-                logEvent(SyncResult::WAITING, accionLog);
-            }
+            // Si no se encontró en semáforos ni en mutexes → error
+            std::cerr << "[Error] Recurso \"" << act.res
+                    << "\" no encontrado en semáforos ni en mutexes.\n";
+            return; 
         } else if (act.type == "ADQUIRE") {
 
             auto &m = sync_.mutexes[act.res];
