@@ -272,6 +272,8 @@ void SimulationEngine::handleSyncActions() {
                 // adquisición atómica
                 s.count--;
                 logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::WAIT);
+                p.acquiredSemaphores.insert(act.res);
+
             } else {
                 // bloqueo
                 p.state = ProcState::BLOCKED;
@@ -281,6 +283,15 @@ void SimulationEngine::handleSyncActions() {
 
         } else if (act.type == "SIGNAL") {
             auto &s = sync_.semaphores[act.res];
+
+            if (!p.acquiredSemaphores.count(act.res)) {
+                std::cerr << "[Error] Proceso " << p.pid << " intentó hacer SIGNAL sobre " 
+                        << act.res << " sin haber hecho WAIT previamente.\n";
+                continue; // Salta esta acción
+            }
+
+            p.acquiredSemaphores.erase(act.res);
+
             // dibuja la señalización del que libera
             logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::SIGNAL);
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <deque>
+#include <unordered_set>
 
 enum class SchedulingAlgo { FIFO, SJF, SRT, RR, PRIORITY };
 enum class ProcState { READY, RUNNING, BLOCKED };
@@ -14,6 +15,8 @@ struct Process {
     ProcState state = ProcState::READY;
     int remaining = 0;
     int completionTime = -1;
+
+    std::unordered_set<std::string> acquiredSemaphores;
 };
 
 struct Mutex {
