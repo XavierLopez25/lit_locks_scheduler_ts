@@ -2,6 +2,7 @@
 #include <string>
 #include <deque>
 #include <unordered_set>
+#include "SyncEnums.h"
 
 enum class SchedulingAlgo { FIFO, SJF, SRT, RR, PRIORITY };
 enum class ProcState { READY, RUNNING, BLOCKED };
@@ -27,6 +28,6 @@ struct Mutex {
 
 struct Semaphore {
     int count;
-    std::deque<int> waitQueue;
+    std::deque<std::pair<int, SyncAction>> waitQueue;
     Semaphore(int c = 0): count(c) {}
 };

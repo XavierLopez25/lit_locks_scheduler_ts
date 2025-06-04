@@ -547,16 +547,6 @@ void ImGuiLayer::renderLoop()
                                 dl->AddLine(b1, b2, colWait, 2.0f);
                             }
 
-                        } else if (e.action == SyncAction::WAIT && e.result == SyncResult::WAITING) {
-                            // espera de semáforo
-                            ImU32 colWait = IM_COL32(200, 0, 0, 255);
-                            ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
-                            ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
-                            ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
-                            ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
-                            dl->AddLine(a1, a2, colWait, 2.0f);
-                            dl->AddLine(b1, b2, colWait, 2.0f);
-
                         } else if (e.action == SyncAction::SIGNAL) {
                             // señalización de semáforo
                             dl->AddTriangleFilled(
@@ -570,10 +560,25 @@ void ImGuiLayer::renderLoop()
                             // “WAKE” incluye el acceso inmediato al recurso
                             ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
                             ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
-                            ImU32 colWake = IM_COL32(0, 200, 0, 255);  // verde para acceso automático
+                            ImU32 colWake = IM_COL32(0, 200, 0, 255);  
                             dl->AddRectFilled(p0, p1, colWake);
-                        }
 
+                        } else if (e.action == SyncAction::WAIT) {
+                            if (e.result == SyncResult::ACCESSED) {
+                                ImVec2 p0 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 p1 = { center.x + halfSize, center.y + halfSize };
+                                ImU32 colWaitOk = IM_COL32(0, 200, 0, 255); 
+                                dl->AddRectFilled(p0, p1, colWaitOk);
+                            } else {
+                                ImU32 colWait = IM_COL32(200, 0, 0, 255);
+                                ImVec2 a1 = { center.x - halfSize, center.y - halfSize };
+                                ImVec2 a2 = { center.x + halfSize, center.y + halfSize };
+                                ImVec2 b1 = { center.x - halfSize, center.y + halfSize };
+                                ImVec2 b2 = { center.x + halfSize, center.y - halfSize };
+                                dl->AddLine(a1, a2, colWait, 2.0f);
+                                dl->AddLine(b1, b2, colWait, 2.0f);
+                            }
+                        }
                     }
                 }
 
@@ -601,7 +606,8 @@ void ImGuiLayer::renderLoop()
                                 ImGui::Text("  Cola de espera:");
                                 ImGui::SameLine();
                                 for (size_t i = 0; i < m.waitQueue.size(); ++i) {
-                                    const auto& pid = engine_.procs()[ m.waitQueue[i] ].pid;
+                                    int idxEnCola = m.waitQueue[i];             
+                                    const auto& pid = engine_.procs()[idxEnCola].pid;
                                     ImGui::Text("%s%s", pid.c_str(), 
                                                 i+1 < m.waitQueue.size() ? ", " : "");
                                     if (i+1 < m.waitQueue.size())
@@ -628,7 +634,8 @@ void ImGuiLayer::renderLoop()
                             ImGui::Text("  Cola de espera:");
                             ImGui::SameLine();
                             for (size_t i = 0; i < s.waitQueue.size(); ++i) {
-                                const auto& pid = engine_.procs()[ s.waitQueue[i] ].pid;
+                                int idxEnCola = s.waitQueue[i].first;      
+                                const auto& pid = engine_.procs()[idxEnCola].pid;
                                 ImGui::Text("%s%s",
                                             pid.c_str(),
                                             (i + 1 < s.waitQueue.size()) ? ", " : "");

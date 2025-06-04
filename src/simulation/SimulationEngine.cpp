@@ -174,7 +174,7 @@ void SimulationEngine::handleSyncActions() {
                     logEvent(SyncResult::ACCESSED, accionLog);
                 } else {
                     p.state = ProcState::BLOCKED;
-                    s.waitQueue.push_back(idx);
+                    s.waitQueue.push_back({ idx, accionLog }); 
                     logEvent(SyncResult::WAITING, accionLog);
                 }
                 continue;
@@ -234,40 +234,41 @@ void SimulationEngine::handleSyncActions() {
 
         } else if (act.type == "RELEASE") {
             auto &m = sync_.mutexes[act.res];
-            // sólo el dueño puede hacer RELEASE
-            if (m.ownerIdx != idx) 
-                continue;
 
-            // dibuja el RELEASE del dueño actual
+            // Verificar que el proceso idx sea el dueño actual:
+            if (m.ownerIdx != idx) {
+                std::cerr << "[Error] Ciclo " << cycle_ 
+                        << ": Proceso " << p.pid
+                        << " intenta RELEASE(\"" << act.res 
+                        << "\") sin haber hecho ACQUIRE.\n";
+                continue;  
+            }
+
+            // Si sí es dueño, procedes a liberar:
             logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::RELEASE);
-
-            // si hay alguien en la cola, lo cede inmediatamente
             if (!m.waitQueue.empty()) {
+                // Pasas la propiedad al siguiente bloqueado…
                 int next = m.waitQueue.front();
                 m.waitQueue.pop_front();
-                // reasignar dueño sin liberar el mutex
                 m.ownerIdx = next;
-                // (m.locked ya está true)
-                procs_[next].justGrantedMutex = true;
-                // despierta a next
                 procs_[next].state = ProcState::READY;
                 readyQueue_.push_back(next);
-                // dibuja el ADQUIRE automático para el despertado
+                // Logueas ADQUIRE automático…
                 syncLog_.push_back({
-                    cycle_,            // mismo ciclo
-                    next,              // nuevo dueño
-                    act.res,
+                    cycle_, next, act.res,
                     SyncResult::ACCESSED,
                     SyncAction::ADQUIRE
                 });
-                procs_[next].justGrantedMutex = false;
             } else {
-                // si no hay nadie esperando, se libera completamente
-                m.locked   = false;
+                // Si no hay nadie en cola, liberas el mutex por completo:
+                m.locked = false;
                 m.ownerIdx = -1;
             }
         } else if (act.type == "WAIT") {
             auto &s = sync_.semaphores[act.res];
+
+            SyncAction accionLog = (act.type == "READ") ? SyncAction::READ : SyncAction::WRITE;
+
             if (s.count > 0) {
                 // adquisición atómica
                 s.count--;
@@ -277,42 +278,44 @@ void SimulationEngine::handleSyncActions() {
             } else {
                 // bloqueo
                 p.state = ProcState::BLOCKED;
-                s.waitQueue.push_back(idx);
-                logEventAt(cycle_, SyncResult::WAITING, SyncAction::WAIT);
+                s.waitQueue.push_back({ idx, accionLog });
+                logEventAt(cycle_, SyncResult::WAITING, accionLog);
             }
 
         } else if (act.type == "SIGNAL") {
             auto &s = sync_.semaphores[act.res];
 
-            if (!p.acquiredSemaphores.count(act.res)) {
-                std::cerr << "[Error] Proceso " << p.pid << " intentó hacer SIGNAL sobre " 
-                        << act.res << " sin haber hecho WAIT previamente.\n";
-                continue; // Salta esta acción
-            }
-
-            p.acquiredSemaphores.erase(act.res);
-
-            // dibuja la señalización del que libera
+            // Primero, dibujamos el SIGNAL del proceso que lo llamó
             logEventAt(cycle_, SyncResult::ACCESSED, SyncAction::SIGNAL);
 
             if (!s.waitQueue.empty()) {
-                // despierta exactamente a uno y le concede el recurso
-                int next = s.waitQueue.front();
+                auto frontPair = s.waitQueue.front();
                 s.waitQueue.pop_front();
 
-                procs_[next].state = ProcState::READY;
-                readyQueue_.push_back(next);
+                int nextIdx = frontPair.first;               
+                SyncAction blockedAction = frontPair.second;
 
-                // el wake incluye el acceso para next:
+                procs_[nextIdx].state = ProcState::READY;
+                readyQueue_.push_back(nextIdx);
+
                 syncLog_.push_back({
                     cycle_,
-                    next,
+                    nextIdx,
                     act.res,
                     SyncResult::ACCESSED,
                     SyncAction::WAKE
                 });
+
+                syncLog_.push_back({
+                    cycle_,
+                    nextIdx,
+                    act.res,
+                    SyncResult::ACCESSED,
+                    blockedAction
+                });
+
             } else {
-                // si nadie esperaba, incrementa el contador
+                // Si no había nadie esperando, incrementamos el contador como antes
                 s.count++;
             }
         }
